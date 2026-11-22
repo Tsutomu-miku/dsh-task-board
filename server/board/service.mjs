@@ -7,7 +7,7 @@ import { manageCards } from "./cards.mjs"
 import { executorActions, manageExecutors } from "./executors.mjs"
 import { manageRuns } from "./runs.mjs"
 
-export function openBoard({ database, workdir, run, codexSandbox = "read-only", presets = async () => [] }) {
+export function openBoard({ database, workdir, run, codexSandbox = "read-only", presets = async () => [], models = async () => [] }) {
   const storage = openDatabase(database)
   let closing = false
   function checkOpen() {
@@ -15,7 +15,7 @@ export function openBoard({ database, workdir, run, codexSandbox = "read-only", 
   }
   try {
     const events = runEventStore(storage.db)
-    const executors = manageExecutors({ store: executorStore(storage.db), codexSandbox, presets,
+    const executors = manageExecutors({ store: executorStore(storage.db), codexSandbox, presets, models, workdir,
       atomic: operation => { checkOpen(); return storage.atomic(operation) } })
     const cards = manageCards({ store: cardStore(storage.db), executors, workdir })
     const runs = manageRuns({ cards, executors, events, storage, run })

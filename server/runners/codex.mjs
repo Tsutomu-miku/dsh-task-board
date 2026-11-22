@@ -5,20 +5,23 @@ import { fileURLToPath } from "node:url"
 const worker = fileURLToPath(new URL("./codex-worker.mjs", import.meta.url))
 const sessionPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
-export function codexArgs(session, sandbox) {
+export function codexArgs(session, sandbox, model) {
   if (session && !sessionPattern.test(session)) throw new Error("无效的 Codex 会话编号。")
   const args = ["exec", "--json", "--sandbox", sandbox, "--skip-git-repo-check"]
-  if (session) args.push("resume", "--json", session)
+  if (model?.effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(model.effort)}`)
+  if (session) args.push("resume", "--json")
+  if (model) args.push("--model", model.id)
+  if (session) args.push(session)
   return [...args, "-"]
 }
 
-export function runCodex({ workdir, prompt, session, sandbox, signal, onSession, onEvent }) {
+export function runCodex({ workdir, prompt, session, sandbox, model, signal, onSession, onEvent }) {
   const stopResult = reason => ({
     status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
     error: reason === "timeout" ? "Codex 运行超过 30 分钟，进程已停止。" : null,
   })
   if (signal.aborted) return Promise.resolve(stopResult(signal.reason))
-  const args = codexArgs(session, sandbox)
+  const args = codexArgs(session, sandbox, model)
   return new Promise(resolve => {
     const child = fork(worker, args, { cwd: workdir, detached: true, execArgv: [], stdio: ["pipe", "pipe", "ignore", "ipc"] })
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Square } from "lucide-react"
+import { Play, RotateCcw, Square } from "lucide-react"
 import { Alert, AlertDescription } from "../components/ui/alert"
 import { Badge } from "../components/ui/badge"
 import { Button } from "../components/ui/button"
@@ -8,7 +8,9 @@ import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { Separator } from "../components/ui/separator"
 import { Textarea } from "../components/ui/textarea"
-import { columns, engines, stateLabel, type Executor, type Save, type Task } from "../contracts"
+import { columns, engines, stateLabel, type Executor, type ModelSelection, type Save, type Task } from "../contracts"
+import { ModelPicker } from "../models/model-picker"
+import { useEnvironment } from "../models/use-environment"
 import { RunDetails } from "./run-details"
 
 export function CardDialog({ task, executor, running, close, save, openSession }: {
@@ -18,7 +20,10 @@ export function CardDialog({ task, executor, running, close, save, openSession }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [stopping, setStopping] = useState(false)
+  const [model, setModel] = useState<ModelSelection | null>(null)
   const active = task.status === "running"
+  const { environment, checking } = useEnvironment(executor?.workdir ?? task.workdir, !active)
+  const modelOverride = model ? { model } : {}
 
   async function change(action: string, fields: object) {
     if (busy) return
@@ -44,12 +49,14 @@ export function CardDialog({ task, executor, running, close, save, openSession }
           <Label htmlFor="run-prompt">任务说明</Label>
           <Textarea id="run-prompt" disabled={active} value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={16000} className="min-h-20" />
         </div>
+        {!active && <ModelPicker id="run-model" models={environment?.models[task.engine] ?? []} value={model}
+          onChange={setModel} defaultLabel="跟随执行器或上次运行" checking={checking} disabled={busy} />}
         <div className="flex flex-wrap items-center gap-2">
           {active ? <Button variant="destructive" disabled={busy || stopping} onClick={() => void change("stop", { runId: task.runs[0]?.id })}>
             <Square aria-hidden="true" />{stopping ? "正在停止…" : "停止运行"}
           </Button> : <>
-            <Button disabled={!canRun} onClick={() => void change("run", { prompt, resume: false })}>开始运行</Button>
-            {task.session && <Button variant="outline" disabled={!canRun} onClick={() => void change("run", { prompt, resume: true })}>继续会话</Button>}
+            <Button disabled={!canRun} onClick={() => void change("run", { prompt, resume: false, ...modelOverride })}><Play aria-hidden="true" />开始运行</Button>
+            {task.session && <Button variant="outline" disabled={!canRun} onClick={() => void change("run", { prompt, resume: true, ...modelOverride })}><RotateCcw aria-hidden="true" />继续会话</Button>}
             <Select value={task.status} disabled={busy} onValueChange={status => void change("move", { status })}>
               <SelectTrigger aria-label="移动卡片"><SelectValue /></SelectTrigger>
               <SelectContent>{columns.filter(column => column.status !== "running").map(column => <SelectItem key={column.status} value={column.status}>{column.label}</SelectItem>)}</SelectContent>

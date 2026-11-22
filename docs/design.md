@@ -43,6 +43,12 @@ DSH Web 的主面板与工作区导航使用 Cordis 的扩展接口，交付前�
 - 每个 DSH profile 同时只运行一张卡片，并用 SQLite 文件锁避免多个宿主同时写入。重启时把遗留运行标记为中断，保留会话和事件。用户选择是否续跑。
 - 迁移沿用已有卡片 JSON 和运行记录。无执行器 ID 的旧卡片按原类型关联默认 DSH 或 Codex 执行器，旧运行保留原工作目录、输出和会话。迁移与中断恢复在一个事务内完成。
 
+## 模型目录与运行
+
+- DSH 模型目录来自当前宿主，使用提供商和模型 ID 区分同名模型。开始任务前按宿主解析模型配置，在原生会话作用域应用模型。DSH 0.2.1-rc.5 的兼容操作隔离在 `server/runners/dsh-model.mjs`，跳过会更新全局默认的会话控制入口。 [DSH 会话控制](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/api/session-controller)
+- Codex 模型目录通过本机 App Server 的 stdio 连接读取，按工作目录缓存 15 秒。目录查询完成后关闭子进程。执行仍由 `codex exec` 负责，选中的模型和推理强度作为本次启动参数。 [Codex App Server](https://learn.chatgpt.com/docs/app-server#list-models-modellist)
+- 新会话默认使用执行器的模型，续跑默认沿用上次运行的明确选择。卡片临时选择只影响本次运行。运行快照保存请求的模型，旧执行器和旧运行的模型字段为空时沿用原本的默认行为。目录查询失败时保留已有配置，并在界面显示目录可用情况。
+
 ## 验收
 
 1. 从已有 0.2 数据库启动，能查看原卡片、状态、历史和会话，并关联到正确的执行器。
@@ -59,6 +65,6 @@ npm test
 npm run build
 npm pack
 dsh_check_home=$(mktemp -d)
-DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.3.0.tgz"
+DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.4.0.tgz"
 DSH_HOME="$dsh_check_home" dsh web --port 0 --no-open
 ```

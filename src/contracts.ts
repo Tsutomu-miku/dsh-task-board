@@ -1,12 +1,14 @@
 export const engines = { dsh: "DSH", codex: "Codex" }
 export type Engine = keyof typeof engines
+export type ModelSelection = { id: string; provider?: string; effort?: string }
+export type ModelChoice = ModelSelection & { name: string; providerName?: string; efforts: { id: string; name: string }[] }
 export type Executor = {
   id: string; engine: Engine; name: string; enabled: boolean; workdir: string | null;
-  preset: string | null; sandbox: "read-only" | "workspace-write" | null;
+  preset: string | null; model?: ModelSelection | null; sandbox: "read-only" | "workspace-write" | null;
 }
 export type Environment = {
   presets: { id: string; name?: string; available: boolean }[];
-  dshModel: string | null; codexVersion: string | null;
+  dshModel: string | null; codexVersion: string | null; models: Record<Engine, ModelChoice[]>;
 }
 
 export type Save = (input: object) => Promise<void>

@@ -33,7 +33,10 @@ export function registerRoutes(ctx, { board, css, environment }) {
   // The installed 0.2 desktop launcher probes this document after signing in.
   route("board.html", ["GET"], async () => new Response(null, { status: 302, headers: { ...headers, location: "../../" } }))
   jsonRoute("state", "GET", () => board.read())
-  jsonRoute("environment", "GET", environment)
+  jsonRoute("environment", "GET", request => {
+    const query = new URL(request.url).searchParams
+    return environment(query.get("workspace"), query.get("refresh") === "1")
+  })
   jsonRoute("events", "GET", request => {
     const id = new URL(request.url).searchParams.get("run")
     if (!uuid.test(id ?? "")) throw new BoardError(400, "无效的运行编号。")

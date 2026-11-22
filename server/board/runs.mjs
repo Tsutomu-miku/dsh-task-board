@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { BoardError, text } from "../errors.mjs"
 import { resolveWorkspace } from "./executors.mjs"
+import { normalizeModel } from "./models.mjs"
 
 const labels = { succeeded: "运行成功", failed: "运行失败", stopped: "运行已停止", interrupted: "运行已中断" }
 
@@ -25,7 +26,10 @@ export function manageRuns({ cards, executors, events, storage, run }) {
     const session = input.resume ? card.session : null
     const previous = session && card.runs.find(attempt => attempt.session === session)
     const workdir = resolveWorkspace(previous?.executor?.workdir ?? executor.workdir ?? card.workdir)
-    const snapshot = { ...executor, workdir, preset: previous?.executor ? previous.executor.preset : executor.preset }
+    const model = input.model === undefined
+      ? (previous ? previous.executor?.model ?? null : executor.model ?? null)
+      : normalizeModel(input.model, executor.engine)
+    const snapshot = { ...executor, workdir, model, preset: previous?.executor ? previous.executor.preset : executor.preset }
     const interruptedRequests = session ? card.runs
       .filter(attempt => attempt.session === session && attempt.status === "interrupted")
       .map(attempt => attempt.id) : []
@@ -34,7 +38,7 @@ export function manageRuns({ cards, executors, events, storage, run }) {
     card.runs.unshift(latest)
     storage.atomic(() => {
       cards.move(card, "running", "run")
-      events.add(latest.id, "status", `开始运行 · ${executor.name}`)
+      events.add(latest.id, "status", `开始运行 · ${executor.name}${model ? ` · ${model.id}` : ""}`)
     })
 
     const controller = new AbortController()

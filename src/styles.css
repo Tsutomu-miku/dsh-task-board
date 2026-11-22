@@ -15,24 +15,31 @@
   --color-card-foreground: var(--dsw-alias-label-primary, CanvasText);
   --color-popover: var(--dsw-alias-bg-layer-1, Canvas);
   --color-popover-foreground: var(--dsw-alias-label-primary, CanvasText);
-  --color-primary: var(--dsw-alias-brand-primary, Highlight);
-  --color-primary-foreground: var(--dsw-alias-brand-primary-invert, HighlightText);
+  --color-primary: var(--dsw-alias-button-primary-fill, Highlight);
+  --color-primary-foreground: var(--dsw-alias-label-primary-inverted, HighlightText);
+  --color-primary-hover: var(--dsw-alias-button-primary-hover, Highlight);
+  --color-link: var(--dsw-alias-link, LinkText);
   --color-secondary: var(--dsw-alias-bg-layer-2, Canvas);
   --color-secondary-foreground: var(--dsw-alias-label-primary, CanvasText);
   --color-muted: var(--dsw-alias-bg-layer-2, Canvas);
   --color-muted-foreground: var(--dsw-alias-label-secondary, GrayText);
   --color-accent: var(--dsw-alias-interactive-bg-hover, Canvas);
   --color-accent-foreground: var(--dsw-alias-label-primary, CanvasText);
-  --color-destructive: var(--dsw-alias-label-danger, #b91c1c);
+  --color-destructive: var(--board-danger);
+  --color-destructive-fill: #a42435;
+  --color-destructive-hover: #8b1e2d;
   --color-border: var(--dsw-alias-border-l, GrayText);
   --color-input: var(--dsw-alias-border-l, GrayText);
   --color-ring: var(--dsw-alias-brand-primary, Highlight);
 }
 
 .dsh-task-board {
+  --board-danger: #a42435;
   font-family: var(--dsh-font-family-text, inherit);
   color: var(--dsw-alias-label-primary, CanvasText);
 }
+
+[data-ds-dark-theme] .dsh-task-board { --board-danger: #ff9fa8; }
 
 .dsh-task-board[data-task-board] {
   height: 100%;

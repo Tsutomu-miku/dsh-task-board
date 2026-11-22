@@ -5,14 +5,19 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
-import type { Engine, Environment, Executor, Save } from "../contracts"
+import type { Engine, Executor, ModelSelection, Save } from "../contracts"
+import { ModelPicker } from "../models/model-picker"
+import { useEnvironment } from "../models/use-environment"
 
-export function ExecutorDialog({ existing, close, save, environment }: {
-  existing?: Executor; close: () => void; save: Save; environment: Environment | null;
+export function ExecutorDialog({ existing, close, save }: {
+  existing?: Executor; close: () => void; save: Save;
 }) {
   const [engine, setEngine] = useState<Engine>(existing?.engine ?? "dsh")
   const [name, setName] = useState(existing?.name ?? "")
   const [workdir, setWorkdir] = useState(existing?.workdir ?? "")
+  const [catalogWorkspace, setCatalogWorkspace] = useState(existing?.workdir ?? null)
+  const [model, setModel] = useState<ModelSelection | null>(existing?.model ?? null)
+  const { environment, checking } = useEnvironment(catalogWorkspace)
   const [preset, setPreset] = useState(existing?.preset ?? "default")
   const [sandbox, setSandbox] = useState(existing?.sandbox ?? "read-only")
   const [error, setError] = useState("")
@@ -26,14 +31,14 @@ export function ExecutorDialog({ existing, close, save, environment }: {
     setError("")
     try {
       await save({ action: "save-executor", id: existing?.id, engine, name, workdir: workdir.trim(),
-        preset: engine === "dsh" && preset !== "default" ? preset : null, sandbox })
+        preset: engine === "dsh" && preset !== "default" ? preset : null, sandbox, model })
       close()
     } catch (error) { setError((error as Error).message) }
     finally { setBusy(false) }
   }
   return (
     <Dialog open onOpenChange={open => { if (!open && !busy) close() }}>
-      <DialogContent>
+      <DialogContent className="max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{existing ? "编辑执行器" : "新增执行器"}</DialogTitle>
           <DialogDescription>新会话使用这里保存的配置。</DialogDescription>
@@ -45,14 +50,14 @@ export function ExecutorDialog({ existing, close, save, environment }: {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="executor-engine">类型</Label>
-            <Select value={engine} disabled={!!existing} onValueChange={value => setEngine(value as Engine)}>
+            <Select value={engine} disabled={!!existing} onValueChange={value => { setEngine(value as Engine); setModel(null) }}>
               <SelectTrigger id="executor-engine"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="dsh">DSH</SelectItem><SelectItem value="codex">Codex</SelectItem></SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="executor-workdir">固定工作目录</Label>
-            <Input id="executor-workdir" placeholder="留空时使用卡片的工作目录" value={workdir} onChange={e => setWorkdir(e.target.value)} />
+            <Input id="executor-workdir" placeholder="留空时使用卡片的工作目录" value={workdir} onChange={e => setWorkdir(e.target.value)} onBlur={() => setCatalogWorkspace(workdir.trim() || null)} />
           </div>
           {engine === "dsh" ? <div className="grid gap-2">
             <Label htmlFor="executor-preset">DSH 预设</Label>
@@ -71,6 +76,8 @@ export function ExecutorDialog({ existing, close, save, environment }: {
               <SelectContent><SelectItem value="read-only">只读</SelectItem><SelectItem value="workspace-write">可写工作区</SelectItem></SelectContent>
             </Select>
           </div>}
+          <ModelPicker id="executor-model" models={environment?.models[engine] ?? []} value={model}
+            onChange={setModel} defaultLabel={`跟随 ${engine === "dsh" ? "DSH" : "Codex"} 默认模型`} checking={checking} />
           {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           <DialogFooter><Button type="submit" disabled={busy}>保存执行器</Button></DialogFooter>
         </form>

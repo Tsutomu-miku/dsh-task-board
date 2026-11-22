@@ -50,7 +50,7 @@ export function RunDetails({ run, openSession }: { run: Run; openSession: (id: s
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={run.error ? "destructive" : "secondary"}>{runLabels[run.status]}</Badge>
         <time className="text-xs text-muted-foreground">{new Date(run.started).toLocaleString()}</time>
-        <span className="text-xs text-muted-foreground">{run.executor.name}</span>
+        <span className="text-xs text-muted-foreground">{run.executor.name}{run.executor.model && ` · ${run.executor.model.id}`}{run.executor.model?.effort && ` · ${run.executor.model.effort}`}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}><List aria-hidden="true" />{expanded ? "收起日志" : "查看日志"}</Button>

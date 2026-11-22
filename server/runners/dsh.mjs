@@ -1,3 +1,5 @@
+import { applyDshModel } from "./dsh-model.mjs"
+
 function turnResult(reason, output) {
   if (reason.kind === "completed") return { status: "succeeded", output }
   if (reason.kind === "aborted") return { status: "stopped", output }
@@ -31,6 +33,7 @@ export async function runDsh(ctx, { workdir, executor, prompt, session, requestI
     const { agent } = found
     if (signal.aborted) return stopped(signal)
     if (agent.status !== "idle") return { status: "failed", error: "DSH 会话正在处理其他消息，请稍后继续。" }
+    if (executor.model) await applyDshModel(ctx, agent, executor.model, signal)
     const interrupted = new Set(interruptedRequests)
     for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep]) {
       if (message.source.kind === "user" && interrupted.has(message.source.rpcId)) agent.inbox.remove(message.id)
