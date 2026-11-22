@@ -1,9 +1,9 @@
 {
   "name": "dsh-task-board",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
-    "build": "tailwindcss -i src/styles.css -o dist/styles.css --minify && esbuild src/main.tsx --bundle --format=esm --platform=browser --target=es2020 --jsx=automatic --minify --outfile=dist/main.js",
+    "build": "tailwindcss -i src/styles.css -o dist/styles.css --minify && node build-client.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test"
   },
@@ -31,7 +31,7 @@
   "main": "./index.mjs",
   "exports": {
     ".": "./index.mjs",
-    "./client": "./client.js",
+    "./client": "./dist/client.js",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"
   },
@@ -43,20 +43,18 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar"
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
       ]
     }
   },
   "files": [
     "index.mjs",
-    "board.mjs",
-    "native-dsh.mjs",
-    "runner.mjs",
-    "codex-worker.mjs",
-    "client.js",
+    "server/",
     "cordis.patch.yml",
-    "index.html",
-    "dist/",
+    "dist/client.js",
+    "dist/styles.css",
+    "docs/design.md",
     "SHADCN-LICENSE.md"
   ]
 }

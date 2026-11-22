@@ -13,7 +13,7 @@ function stopped(signal) {
   return { status: signal.reason === "shutdown" ? "interrupted" : "stopped" }
 }
 
-export async function runDsh(ctx, { workdir, prompt, session, requestId, interruptedRequests, signal: caller, onSession }) {
+export async function runDsh(ctx, { workdir, executor, prompt, session, requestId, interruptedRequests, signal: caller, onSession, onEvent }) {
   const timeout = new AbortController()
   const deadline = setTimeout(() => timeout.abort("timeout"), 30 * 60 * 1000)
   const signal = AbortSignal.any([caller, timeout.signal])
@@ -23,7 +23,7 @@ export async function runDsh(ctx, { workdir, prompt, session, requestId, interru
   let output = ""
   try {
     if (signal.aborted) return stopped(signal)
-    const sessionId = session ?? (await sessionController.create({ cwd: workdir })).sessionId
+    const sessionId = session ?? (await sessionController.create({ cwd: workdir, agentPreset: executor.preset ?? undefined })).sessionId
     onSession(sessionId)
     if (signal.aborted) return stopped(signal)
     const found = await sessionController.resolveAgent(sessionId)
@@ -63,9 +63,17 @@ export async function runDsh(ctx, { workdir, prompt, session, requestId, interru
         if (owned(agent.inbox.nextTurn[0])) ownedTurn = currentTurn
       } else if (type === "user/message" && owned(data)) {
         ownedTurn = currentTurn
+        onEvent("status", "DSH 已接收任务")
       } else if (type === "assistant/message" && ownedTurn === data.turn) {
         const text = data.message.content.filter(part => part.type === "text").map(part => part.text).join("")
-        if (text) output = text.slice(0, 16000)
+        if (text) {
+          output = text.slice(0, 16000)
+          onEvent("output", text)
+        }
+      } else if (type === "tool/call" && ownedTurn === data.turn) {
+        onEvent("tool", data.name)
+      } else if (type === "tool/result" && ownedTurn === data.turn && data.error) {
+        onEvent("error", data.error.reason ?? data.error.code)
       } else if (type === "turn/end" && ownedTurn === data.turn) {
         ended = true
         result = turnResult(data.reason, output)

@@ -1,48 +1,35 @@
 # DSH 任务看板
 
-任务看板是 DeepSeek Harness 的 Cordis 插件。安装在 Web profile 后，从 DSH 左侧的「任务看板」打开。面板使用 shadcn/ui，任务接口沿用 DSH Web 登录。
+以 DSH Web 插件管理本机任务、DSH 和 Codex 执行器。看板、配置表单与运行详情使用 shadcn/ui，并跟随 DSH 的主题和字体。
 
-## 安装
+## 安装与升级
 
-已验证 DSH `0.2.1-rc.5`、Node.js 22.23.1 和 Linux。插件需要 Node.js 22.13 或更新版本，以及 POSIX 进程组支持。安装依赖 DSH 的插件管理命令和 `pnpm`。
-
-在安装包所在目录执行第一行。第二行可在要工作的项目目录执行。若 Web 已启动，重新启动一次即可加载。
+已验证 DSH `0.2.1-rc.5`、Node.js 22.23.1 和 WSL/Linux。需要 Node.js 22.13 或以上、`dsh` 和 `pnpm`。执行 Codex 任务还需要本机的 `codex` CLI 和登录状态。
 
 ```sh
-dsh plugin --profile web add ./dsh-task-board-0.2.0.tgz
+dsh plugin --profile web add ./dsh-task-board-0.3.0.tgz
 dsh web
 ```
 
-进入 `dsh web` 输出的登录地址，再点侧栏的「任务看板」。新建卡片默认使用本次启动 Web 的目录。卡片会记住创建时的工作目录。
+升级时先等正在执行的任务结束，再重启 Web。原有 0.2 卡片和运行历史会自动关联到对应的默认执行器。保持同一个 Web profile 即可沿用数据。
 
-DSH 执行使用当前 Web profile 的模型和权限配置，并创建可在该 profile 的会话列表找到的原生会话。Codex 执行使用宿主 PATH 上的 `codex` 和它自己的登录状态，默认使用 `read-only` 沙箱。
+## 使用
 
-要固定新卡片的项目目录或允许 Codex 写入工作区，在 Web profile 的 `cordis.patch.yml` 加入下列配置。执行权限由维护宿主的用户决定。
+1. 从 DSH 侧栏打开「任务看板」，切到「执行器」编辑或新增配置。DSH 使用宿主的模型和所选预设，Codex 使用本机 CLI 及配置的沙箱。
+2. 在「看板」新建卡片并选择执行器。执行器设置了固定目录时，新会话使用该目录。默认目录由 Web 启动目录决定。
+3. 在卡片详情里开始运行、查看日志或停止。DSH 日志可打开原生会话。继续会话时沿用会话原工作目录。
+4. 成功后的卡片进入「待验收」。可以拖动卡片或通过详情菜单调整状态。
 
-```yaml
-- id: task-board
-  config:
-    workspace: /absolute/path/to/project
-    codexSandbox: workspace-write
-```
+SQLite 数据在 Web profile 下的 `task-board/board.sqlite`。每个 profile 同时执行一张卡片。宿主异常退出后，进行中的运行会标记为中断，保留运行记录和已保存的会话。
 
-## 工作流与存储
-
-- 卡片支持待办、执行中、待验收、完成。可以拖拽待办、待验收和完成卡片，也可以在详情里切换状态。
-- 同一 profile 同时运行一张卡片。可新建会话、继续已保存的会话或请求停止。执行成功进入待验收。失败、停止和中断回到待办。
-- SQLite 保存卡片、状态变更、运行结果和会话编号，目录为 Web profile 下的 `task-board/`。同一个 profile 只允许一个看板宿主写入。
-- 单次运行的时间上限为 30 分钟。宿主异常退出后，遗留的执行会显示为已中断，卡片回到待办，由用户决定是否继续。执行过的外部操作需要在继续前核对。
-
-## 开发与打包
+## 开发
 
 ```sh
 npm ci
 npm run typecheck
-npm run build
 npm test
+npm run build
 npm pack
 ```
 
-`cordis.patch.yml` 声明插件装载项，`client.js` 注册 DSH 主面板和侧栏，`index.mjs` 注册 DSH 鉴权的 Fetch 路由。shadcn/ui 组件版权见 `SHADCN-LICENSE.md`。
-
-[DSH Bundle 发布文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md) · [DSH Web 客户端扩展接口](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/web-client.md)
+`npm test` 覆盖旧库迁移、写入锁、默认执行器、停止竞争和续跑配置。打包后使用隔离的 DSH Web profile 验证浏览器行为，详见[设计与验收](docs/design.md)。第三方组件版权见 [SHADCN-LICENSE.md](SHADCN-LICENSE.md)。

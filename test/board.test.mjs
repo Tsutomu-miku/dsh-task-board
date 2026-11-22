@@ -3,8 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { openBoard } from "../board.mjs"
-import { codexArgs } from "../runner.mjs"
+import { openBoard } from "../server/board/service.mjs"
+import { codexArgs } from "../server/runners/codex.mjs"
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 

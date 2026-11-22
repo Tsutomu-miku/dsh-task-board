@@ -12,7 +12,7 @@ export function codexArgs(session, sandbox) {
   return [...args, "-"]
 }
 
-export function runCodex({ workdir, prompt, session, sandbox, signal, onSession }) {
+export function runCodex({ workdir, prompt, session, sandbox, signal, onSession, onEvent }) {
   const stopResult = reason => ({
     status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
     error: reason === "timeout" ? "Codex 运行超过 30 分钟，进程已停止。" : null,
@@ -59,7 +59,12 @@ export function runCodex({ workdir, prompt, session, sandbox, signal, onSession 
           stop("persistence")
         }
       }
-      if (event.type === "item.completed" && event.item?.type === "agent_message") output = String(event.item.text ?? "").slice(0, 16000)
+      if (event.type === "turn.started") onEvent("status", "Codex 已接收任务")
+      if (event.type === "item.started" && event.item?.type === "command_execution") onEvent("tool", "Codex 已开始执行命令")
+      if (event.type === "item.completed" && event.item?.type === "agent_message") {
+        output = String(event.item.text ?? "").slice(0, 16000)
+        onEvent("output", output)
+      }
       if (event.type === "turn.completed") confirmed = true
       if (event.type === "turn.failed") {
         confirmed = false
