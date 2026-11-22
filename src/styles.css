@@ -57,5 +57,14 @@
     :where(button:not(:disabled)) { cursor: pointer; }
     :where(svg) { display: block; }
   }
+  .task-reply { font-size: .875rem; line-height: 1.65; }
+  .task-reply > * + * { margin-top: .75rem; }
+  .task-reply :where(ul, ol) { padding-inline-start: 1.4rem; }
+  .task-reply li + li { margin-top: .2rem; }
+  .task-reply a { color: var(--dsw-alias-link, LinkText); text-decoration: underline; }
+  .task-reply :where(pre, code) { font-family: var(--dsh-font-family-code, monospace); }
+  .task-reply :not(pre) > code { border-radius: .25rem; padding: .12rem .3rem; background: var(--dsw-alias-bg-layer-2, Canvas); }
+  .task-reply pre { max-width: 100%; overflow: auto; border-radius: .5rem; padding: .75rem; background: var(--dsw-alias-bg-layer-2, Canvas); }
+  .task-reply blockquote { margin-inline: 0; padding-inline-start: .75rem; border-inline-start-width: 2px; color: var(--dsw-alias-label-secondary, GrayText); }
   @tailwind utilities;
 }

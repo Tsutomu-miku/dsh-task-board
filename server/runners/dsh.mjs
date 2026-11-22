@@ -1,3 +1,4 @@
+import { followDshPreview } from "./dsh-preview.mjs"
 import { applyDshModel } from "./dsh-model.mjs"
 
 function turnResult(reason, output) {
@@ -15,12 +16,13 @@ function stopped(signal) {
   return { status: signal.reason === "shutdown" ? "interrupted" : "stopped" }
 }
 
-export async function runDsh(ctx, { workdir, executor, prompt, session, requestId, interruptedRequests, signal: caller, onSession, onEvent }) {
+export async function runDsh(ctx, { workdir, executor, prompt, session, requestId, interruptedRequests, signal: caller, onSession, onEvent, onPreview }) {
   const timeout = new AbortController()
   const deadline = setTimeout(() => timeout.abort("timeout"), 30 * 60 * 1000)
   const signal = AbortSignal.any([caller, timeout.signal])
   const { sessionController, sessions } = ctx
   let dispose
+  let disposePreview
   let stop
   let output = ""
   try {
@@ -83,6 +85,7 @@ export async function runDsh(ctx, { workdir, executor, prompt, session, requestI
         settle()
       }
     })
+    disposePreview = followDshPreview(ctx, agent, turn => !ended && ownedTurn === turn, onPreview)
     signal.addEventListener("abort", stop, { once: true })
     await sessionController.prompt({ sessionId, requestId, mode: "queue", content: [{ type: "text", text: prompt }] }, signal)
     if (signal.aborted) stop()
@@ -98,6 +101,7 @@ export async function runDsh(ctx, { workdir, executor, prompt, session, requestI
   } finally {
     clearTimeout(deadline)
     if (stop) signal.removeEventListener("abort", stop)
+    disposePreview?.()
     dispose?.()
   }
 }

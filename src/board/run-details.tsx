@@ -44,7 +44,7 @@ function RunLog({ id, active }: { id: string; active: boolean }) {
 
 export function RunDetails({ run, openSession }: { run: Run; openSession: (id: string) => void }) {
   const active = run.status === "running"
-  const [expanded, setExpanded] = useState(active)
+  const [expanded, setExpanded] = useState(false)
   return (
     <Card className="grid gap-2 rounded-lg p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -59,7 +59,6 @@ export function RunDetails({ run, openSession }: { run: Run; openSession: (id: s
       </div>
       {expanded && <RunLog id={run.id} active={active} />}
       {run.error && <Alert variant="destructive"><AlertDescription>{run.error}</AlertDescription></Alert>}
-      {run.output && <pre className="max-h-56 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap wrap-anywhere">{run.output}</pre>}
     </Card>
   )
 }

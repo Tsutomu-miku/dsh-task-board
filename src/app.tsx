@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from "./components/ui/alert"
 import { Button } from "./components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select"
 import { BoardView } from "./board/board-view"
-import { CardDialog } from "./board/card-dialog"
+import { ConversationPage } from "./conversation/conversation-page"
 import { CreateCardDialog } from "./board/create-card-dialog"
 import { ExecutorsPanel } from "./executors/executors-panel"
 import { BoardPortal } from "./portal"
@@ -40,6 +40,8 @@ export function App({ openSession }: { openSession: (id: string) => void }) {
   return (
     <BoardPortal.Provider value={portal}>
       <div className="dsh-task-board" data-task-board>
+        {task ? <ConversationPage key={task.id} task={task} executor={board?.executors.find(row => row.id === task.executorId)}
+          running={running} close={() => setSelected(null)} save={save} openSession={openSession} /> :
         <div className="mx-auto grid max-w-7xl gap-4 p-4 md:p-6">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
             <h1 className="flex items-center gap-2 text-lg font-semibold"><Columns3 className="size-5" aria-hidden="true" />任务看板</h1>
@@ -61,11 +63,9 @@ export function App({ openSession }: { openSession: (id: string) => void }) {
             {!board.defaultExecutor && <p className="text-sm text-muted-foreground">请在执行器页面启用一个执行器。</p>}
             <BoardView cards={cards} executors={board.executors} open={setSelected} move={move} />
           </>}
-        </div>
+        </div>}
       </div>
       {creating && portal && board && <CreateCardDialog close={() => setCreating(false)} save={save} executors={board.executors} preferred={board.defaultExecutor} />}
-      {task && portal && <CardDialog key={task.id} task={task} executor={board?.executors.find(row => row.id === task.executorId)}
-        running={running} close={() => setSelected(null)} save={save} openSession={openSession} />}
     </BoardPortal.Provider>
   )
 }

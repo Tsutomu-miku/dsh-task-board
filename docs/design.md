@@ -16,7 +16,7 @@
 | 本地存储 | Node.js 22 的 SQLite、WAL | 沿用 0.2 数据库，支持事务、持久化运行事件和重启恢复。单机部署只需现有 DSH 与 Codex。 |
 | DSH 执行 | 宿主 Session Controller、预设、会话事件 | 保留 DSH 的模型、权限、会话续跑和会话入口。 |
 | Codex 执行 | 本机 `codex exec --json` 与专用工作进程 | 沿用 CLI 的登录和沙箱配置。工作进程跟踪取消和宿主退出，回传结构化运行事件。 |
-| 日志更新 | 仅对打开的活跃运行轮询日志接口 | 复用宿主鉴权，支持页面重开后恢复。当前单机单任务规模适合有界轮询。 |
+| 会话更新 | SQLite 保留已提交的回复，活跃会话轮询预览 | 复用宿主鉴权。运行记录按需读取。 |
 
 DSH Web 的主面板与工作区导航使用 Cordis 的扩展接口，交付前要在安装版 DSH 中验证。 [DSH Web 客户端](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/web-client.md) · [DSH 布局与主题](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-layout/README.md)
 
@@ -49,6 +49,12 @@ DSH Web 的主面板与工作区导航使用 Cordis 的扩展接口，交付前�
 - Codex 模型目录通过本机 App Server 的 stdio 连接读取，按工作目录缓存 15 秒。目录查询完成后关闭子进程。执行仍由 `codex exec` 负责，选中的模型和推理强度作为本次启动参数。 [Codex App Server](https://learn.chatgpt.com/docs/app-server#list-models-modellist)
 - 新会话默认使用执行器的模型，续跑默认沿用上次运行的明确选择。卡片临时选择只影响本次运行。运行快照保存请求的模型，旧执行器和旧运行的模型字段为空时沿用原本的默认行为。目录查询失败时保留已有配置，并在界面显示目录可用情况。
 
+## 任务会话
+
+卡片打开独立会话页。发送、追问和停止通过原有运行服务提交，运行记录从页头按需打开。默认用卡片已保存的 DSH 会话或 Codex thread 续跑，用户也可以选择另起会话。会话内的 Markdown 由 react-markdown 渲染，HTML 与外部图片保持关闭。
+
+会话页按时间显示看板提交的提示词和助手回复。0.5 将新的已提交回复单独写入 SQLite，旧版本的运行输出作为历史回退。DSH 的流式预览来自原生事件，仅显示当前运行拥有的输出。Codex 显示 CLI 发出的回复事件。刷新或重启后，从数据库恢复提交过的消息和执行器会话 ID。也可从会话页打开 DSH 原生会话查看其完整记录。
+
 ## 验收
 
 1. 从已有 0.2 数据库启动，能查看原卡片、状态、历史和会话，并关联到正确的执行器。
@@ -65,6 +71,6 @@ npm test
 npm run build
 npm pack
 dsh_check_home=$(mktemp -d)
-DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.4.0.tgz"
+DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.5.0.tgz"
 DSH_HOME="$dsh_check_home" dsh web --port 0 --no-open
 ```

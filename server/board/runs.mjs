@@ -5,7 +5,7 @@ import { normalizeModel } from "./models.mjs"
 
 const labels = { succeeded: "运行成功", failed: "运行失败", stopped: "运行已停止", interrupted: "运行已中断" }
 
-export function manageRuns({ cards, executors, events, storage, run }) {
+export function manageRuns({ cards, executors, events, replies, storage, run }) {
   let active
 
   function recover(card) {
@@ -42,7 +42,7 @@ export function manageRuns({ cards, executors, events, storage, run }) {
     })
 
     const controller = new AbortController()
-    const job = { cardId: card.id, runId: latest.id, controller, done: null }
+    const job = { cardId: card.id, runId: latest.id, controller, preview: "", done: null }
     active = job
     job.done = execute(job, card, latest, { engine: executor.engine, executor: snapshot, workdir, prompt, session, interruptedRequests })
     return card
@@ -54,11 +54,21 @@ export function manageRuns({ cards, executors, events, storage, run }) {
       result = await run({ ...options, requestId: attempt.id, signal: job.controller.signal,
         onEvent(kind, message) {
           if (active !== job) return
-          try { events.add(attempt.id, kind, message) }
-          catch (error) {
+          try {
+            if (kind === "output" && String(message ?? "").trim()) {
+              storage.atomic(() => {
+                replies.add(card.id, attempt.id, message)
+                events.add(attempt.id, kind, message)
+              })
+              job.preview = ""
+            } else events.add(attempt.id, kind, message)
+          } catch (error) {
             job.controller.abort("persistence")
             console.error("dsh-task-board: event write failed", error.code ?? error.name)
           }
+        },
+        onPreview(text) {
+          if (active === job) job.preview = String(text ?? "").slice(0, 16000)
         },
         onSession(id) {
           if (active !== job) return
@@ -91,6 +101,9 @@ export function manageRuns({ cards, executors, events, storage, run }) {
   return {
     start,
     recover,
+    preview(cardId) {
+      return active?.cardId === cardId && active.preview ? { runId: active.runId, text: active.preview } : null
+    },
     stop(card, runId) {
       if (active?.cardId !== card.id || (runId && runId !== active.runId)) {
         throw new BoardError(409, "这次运行已结束，请刷新后查看。")

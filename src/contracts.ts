@@ -27,6 +27,10 @@ export type Run = {
   output: string; error: string | null; session: string | null; executor: Executor;
 }
 export type RunEvent = { seq: number; at: number; kind: "status" | "tool" | "output" | "error"; message: string }
+export type Transcript = {
+  replies: { id: number; runId: string; text: string }[];
+  preview: { runId: string; text: string } | null;
+}
 export type Task = {
   id: string; title: string; prompt: string; engine: Engine; executorId: string; status: State;
   workdir: string; session: string | null; runs: Run[];

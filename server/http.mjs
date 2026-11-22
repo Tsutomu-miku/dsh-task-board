@@ -37,6 +37,11 @@ export function registerRoutes(ctx, { board, css, environment }) {
     const query = new URL(request.url).searchParams
     return environment(query.get("workspace"), query.get("refresh") === "1")
   })
+  jsonRoute("conversation", "GET", request => {
+    const card = new URL(request.url).searchParams.get("card")
+    if (!uuid.test(card ?? "")) throw new BoardError(400, "无效的任务编号。")
+    return board.conversation(card)
+  })
   jsonRoute("events", "GET", request => {
     const id = new URL(request.url).searchParams.get("run")
     if (!uuid.test(id ?? "")) throw new BoardError(400, "无效的运行编号。")

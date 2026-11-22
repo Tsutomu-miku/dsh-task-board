@@ -2,6 +2,7 @@ import { BoardError } from "../errors.mjs"
 import { cardStore } from "../storage/cards.mjs"
 import { openDatabase } from "../storage/database.mjs"
 import { executorStore } from "../storage/executors.mjs"
+import { replyStore } from "../storage/replies.mjs"
 import { runEventStore } from "../storage/run-events.mjs"
 import { manageCards } from "./cards.mjs"
 import { executorActions, manageExecutors } from "./executors.mjs"
@@ -18,7 +19,8 @@ export function openBoard({ database, workdir, run, codexSandbox = "read-only", 
     const executors = manageExecutors({ store: executorStore(storage.db), codexSandbox, presets, models, workdir,
       atomic: operation => { checkOpen(); return storage.atomic(operation) } })
     const cards = manageCards({ store: cardStore(storage.db), executors, workdir })
-    const runs = manageRuns({ cards, executors, events, storage, run })
+    const replies = replyStore(storage.db)
+    const runs = manageRuns({ cards, executors, events, replies, storage, run })
     storage.atomic(() => {
       executors.seed()
       for (const card of cards.list()) {
@@ -33,6 +35,11 @@ export function openBoard({ database, workdir, run, codexSandbox = "read-only", 
         return { workdir, cards: cards.list(), executors: executors.list(), defaultExecutor: executors.defaultId() }
       },
       events(id) { checkOpen(); return events.list(id) },
+      conversation(id) {
+        checkOpen()
+        cards.get(id)
+        return { replies: replies.list(id), preview: runs.preview(id) }
+      },
       act(input) {
         checkOpen()
         if (executorActions.has(input.action)) return executors.act(input)
