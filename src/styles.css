@@ -6,10 +6,10 @@
 @custom-variant dark (&:where([data-ds-dark-theme], [data-ds-dark-theme] *));
 
 @theme inline {
-  --radius-sm: .375rem;
-  --radius-md: .625rem;
-  --radius-lg: .875rem;
-  --radius-xl: 1.125rem;
+  --radius-sm: var(--dsw-radius-xs, 4px);
+  --radius-md: var(--dsw-radius-sm, 8px);
+  --radius-lg: var(--dsw-radius-md, 12px);
+  --radius-xl: var(--dsw-radius-lg, 16px);
   --color-background: var(--dsw-alias-bg-base, Canvas);
   --color-foreground: var(--dsw-alias-label-primary, CanvasText);
   --color-card: var(--dsw-alias-bg-layer-1, Canvas);
@@ -37,29 +37,23 @@
 .dsh-task-board {
   --board-danger: #a42435;
   --board-accent: var(--dsw-alias-link, #4176e6);
-  --board-accent-ink: color-mix(in srgb, var(--board-accent) 72%, var(--dsw-alias-label-primary, CanvasText));
+  --board-hairline: var(--dsh-hairline-width, 0.5px);
   --board-line: var(--dsw-alias-border-l2, color-mix(in srgb, CanvasText 12%, transparent));
   --board-line-soft: var(--dsw-alias-border-l1, color-mix(in srgb, CanvasText 7%, transparent));
   --board-recessed: var(--dsw-alias-bg-module-platform, color-mix(in srgb, CanvasText 5%, Canvas));
   --board-surface: var(--dsw-alias-bg-layer-1, Canvas);
-  --board-shadow: 0 1px 2px #17274912, 0 4px 12px -5px #17274922;
-  --board-shadow-raised: 0 2px 5px #17274915, 0 10px 28px -9px #17274932;
-  font-family: var(--dsh-font-family-text, inherit);
+  font-family: var(--dsw-font-family, inherit);
   color: var(--dsw-alias-label-primary, CanvasText);
 }
 
-[data-ds-dark-theme] .dsh-task-board {
-  --board-danger: #ff9fa8;
-  --board-shadow: 0 1px 2px #0005, 0 4px 12px -5px #0009;
-  --board-shadow-raised: 0 2px 5px #0007, 0 10px 28px -9px #000a;
-}
+[data-ds-dark-theme] .dsh-task-board { --board-danger: #ff9fa8; }
 
 .dsh-task-board[data-task-board] {
   height: 100%;
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  background-color: color-mix(in srgb, var(--board-recessed) 56%, var(--board-surface));
+  background-color: var(--dsw-alias-bg-base, Canvas);
 }
 
 @scope (.dsh-task-board) {
@@ -70,14 +64,19 @@
     :where(button:not(:disabled)) { cursor: pointer; }
     :where(svg) { display: block; }
   }
-  .task-reply { font-size: .875rem; line-height: 1.65; }
   .task-reply > * + * { margin-top: .75rem; }
   .task-reply :where(ul, ol) { padding-inline-start: 1.4rem; }
   .task-reply li + li { margin-top: .2rem; }
-  .task-reply a { color: var(--dsw-alias-link, LinkText); text-decoration: underline; }
+  .task-reply a { color: var(--dsw-alias-link, LinkText); font-weight: 500; }
+  .task-reply a:focus-visible { text-decoration: underline dotted; text-underline-offset: 3px; }
+  @media (hover: hover) {
+    .task-reply a:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+  }
   .task-reply :where(pre, code) { font-family: var(--dsh-font-family-code, monospace); }
   .task-reply :not(pre) > code { border-radius: .25rem; padding: .12rem .3rem; background: var(--board-recessed); }
-  .task-reply pre { max-width: 100%; overflow: auto; border: 1px solid var(--board-line-soft); border-radius: .75rem; padding: .85rem; background: var(--board-recessed); }
+  .task-reply pre { max-width: 100%; overflow: auto; border: var(--board-hairline) solid var(--board-line-soft); border-radius: var(--dsw-radius-lg, 16px); padding: .85rem; background: var(--dsw-alias-markdown-code-block, var(--board-recessed)); }
   .task-reply blockquote { margin-inline: 0; padding-inline-start: .75rem; border-inline-start-width: 2px; color: var(--dsw-alias-label-secondary, GrayText); }
-  @tailwind utilities;
+  @layer utilities {
+    @tailwind utilities;
+  }
 }

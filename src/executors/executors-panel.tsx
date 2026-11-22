@@ -25,18 +25,18 @@ export function ExecutorsPanel({ executors, preferred, save }: { executors: Exec
   return (
     <section className="grid min-w-0 gap-4" aria-label="执行器配置">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => setEditing("new")}><Plus aria-hidden="true" />新增执行器</Button>
-        <Button variant="outline" disabled={checking} onClick={reload}><RefreshCw aria-hidden="true" />检测运行环境</Button>
+        <Button size="sm" className="board-primary-action" onClick={() => setEditing("new")}><Plus aria-hidden="true" />新增执行器</Button>
+        <Button size="sm" variant="ghost" disabled={checking} onClick={reload}><RefreshCw aria-hidden="true" />检测运行环境</Button>
       </div>
       {(error || environmentError) && <Alert variant="destructive"><AlertDescription>{error || environmentError}</AlertDescription></Alert>}
       <div className="board-executors grid gap-4">
-        {executors.map(row => <Card key={row.id} className="board-surface min-w-0 gap-4 py-4">
+        {executors.map(row => <Card key={row.id} className="board-settings-card min-w-0 gap-4 py-4">
           <CardHeader className="flex min-w-0 items-start gap-3 px-4 md:px-5">
-            <span className="board-section-icon grid size-10 shrink-0 place-items-center rounded-xl">
+            <span className="board-settings-icon grid size-9 shrink-0 place-items-center rounded-lg">
               {row.engine === "dsh" ? <Bot className="size-5" aria-hidden="true" /> : <CodeXml className="size-5" aria-hidden="true" />}
             </span>
             <div className="min-w-0 space-y-2">
-              <CardTitle className="leading-snug wrap-anywhere">{row.name}</CardTitle>
+              <CardTitle className="text-sm leading-5 font-medium wrap-anywhere">{row.name}</CardTitle>
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="secondary">{engines[row.engine]}</Badge>
                 <Badge variant="outline">{row.enabled ? "已启用" : "已停用"}</Badge>
@@ -45,7 +45,7 @@ export function ExecutorsPanel({ executors, preferred, save }: { executors: Exec
             </div>
           </CardHeader>
           <CardContent className="grow px-4 md:px-5">
-            <dl className="grid gap-2 rounded-lg border bg-muted/60 p-3 text-sm">
+            <dl className="grid gap-2 rounded-xl bg-muted/60 p-3 text-[13px] leading-5">
               <div className="grid grid-cols-[5.5rem_1fr] gap-2"><dt className="text-muted-foreground">工作目录</dt><dd className="break-all">{row.workdir ?? "使用卡片的工作目录"}</dd></div>
               <div className="grid grid-cols-[5.5rem_1fr] gap-2"><dt className="flex items-center gap-1.5 text-muted-foreground"><Cpu className="size-3.5" aria-hidden="true" />模型</dt><dd className="break-all">{row.model?.id ?? `跟随 ${engines[row.engine]}${row.engine === "dsh" && environment?.dshModel ? ` · ${environment.dshModel}` : " 默认"}`}{row.model?.effort && ` · ${row.model.effort}`}</dd></div>
               {row.engine === "dsh" ? <>

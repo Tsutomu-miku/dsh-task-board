@@ -26,15 +26,15 @@ export function ConversationPage({ task, executor, running, close, save, openSes
 
   return (
     <section data-task-conversation className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <header className="conversation-header relative z-10 border-b">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
+      <header className="conversation-header relative z-10">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2.5 md:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Button variant="outline" size="icon" aria-label="返回看板" title="返回看板" onClick={close}><ArrowLeft aria-hidden="true" /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="返回看板" title="返回看板" onClick={close}><ArrowLeft aria-hidden="true" /></Button>
             <div className="min-w-0">
-              <h1 className="truncate text-[1.0625rem] font-semibold tracking-tight" title={task.title}>{task.title}</h1>
-              <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary" className="max-w-[45%]"><span className="truncate">{executor?.name ?? engines[task.engine]}</span></Badge>
-                <FolderOpen className="size-3.5 shrink-0" aria-hidden="true" />
+              <h1 className="truncate text-sm leading-5 font-medium" title={task.title}>{task.title}</h1>
+              <div className="flex min-w-0 items-center gap-2 text-xs leading-[18px] text-muted-foreground">
+                <span className="max-w-[45%] truncate">{executor?.name ?? engines[task.engine]}</span>
+                <FolderOpen className="size-3 shrink-0" aria-hidden="true" />
                 <span className="truncate" title={task.workdir}>{task.workdir}</span>
               </div>
             </div>
@@ -44,7 +44,7 @@ export function ConversationPage({ task, executor, running, close, save, openSes
               <SelectTrigger size="sm" className="bg-card" aria-label="移动卡片"><SelectValue /></SelectTrigger>
               <SelectContent>{columns.filter(column => column.status !== "running").map(column => <SelectItem key={column.status} value={column.status}>{column.label}</SelectItem>)}</SelectContent>
             </Select>}
-            <Button variant="outline" size="sm" onClick={() => setHistory(true)}><History aria-hidden="true" />运行记录</Button>
+            <Button variant="ghost" size="sm" onClick={() => setHistory(true)}><History aria-hidden="true" />运行记录</Button>
             {task.engine === "dsh" && task.session && <Button variant="ghost" size="sm" className="text-link" onClick={() => openSession(task.session!)}>打开 DSH 会话<ArrowUpRight aria-hidden="true" /></Button>}
           </div>
         </div>

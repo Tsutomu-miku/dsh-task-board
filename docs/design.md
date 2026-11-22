@@ -35,7 +35,15 @@ DSH Web 的主面板与工作区导航使用 Cordis 的扩展接口，交付前�
 
 依赖从入口指向各模块。HTTP 层调用看板服务，服务依赖存储与执行适配器。前端和后端的边界是 JSON 请求与响应。常见的新增操作应能限定在所属功能、接口接线和对应测试。
 
-面板与弹层共用一套主题映射。背景取 DSH 的模块底色，卡片取宿主表面色，阴影与边框标示层级。状态色沿用宿主语义色。看板根据主面板的可用宽度选用四列、两列或一列，展开侧栏后也能适配。
+## DSH Web 视觉规范
+
+以下依据固定到本机使用的 `dsh-v0.2.1-rc.5`。DSH 本体用 CSS Modules 和 `ui-primitives`。插件按项目约定保留 shadcn/ui 和 Tailwind，用 `src/styles.css` 映射宿主变量，通过 `src/surfaces.css` 应用原生布局和表面样式。 [Web 样式规范](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/docs/web-styling.md) · [圆角标准](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/docs/ui-radius.md)
+
+| 部位 | 原生依据 | 插件做法 |
+| --- | --- | --- |
+| 页面框架和字号 | 「插件」与「自动化任务」共用 960px 内容区、20/28px 的 500 字重标题、13px 次级文字。 [插件页](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css) · [自动化任务页](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/packages/client/ui-schedule/src/client/TaskManagerPage.module.css) | 普通页头和轻量筛选区共用内容轴。看板根据面板宽度切换四列、两列或一列。列本身保持中性底色，颜色只用于状态标记。 |
+| 卡片和浮层 | 任务类卡片用 R16，设置卡用 R20 和发丝边。浮层用 `--dsw-elevation-panel` 或 `--dsw-elevation-prominent`，阴影的第一层自带发丝边。 [圆角标准](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/docs/ui-radius.md) · [官方阴影实现](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/packages/client/ui-theme/src/styles/gradient-shadow-text.css) | 可拖拽的任务卡采用 R16 和宿主面板阴影，作为看板主要交互面。执行器和单条运行记录采用设置卡样式。 |
+| 会话 | 原生输入框使用 R28、`--dsw-specific-input-major`、`--dsw-elevation-soft`，配 34px 的圆形发送按钮。正文跟随宿主字号。 [输入框源码](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css) | 用户消息使用圆角气泡。回复按正文排版，运行记录从页头展开。输入区和正文共用内容轴。 |
 
 ## 数据与生命周期
 
@@ -73,6 +81,6 @@ npm test
 npm run build
 npm pack
 dsh_check_home=$(mktemp -d)
-DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.5.1.tgz"
+DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.5.2.tgz"
 DSH_HOME="$dsh_check_home" dsh web --port 0 --no-open
 ```

@@ -46,7 +46,7 @@ export function RunDetails({ run, openSession }: { run: Run; openSession: (id: s
   const active = run.status === "running"
   const [expanded, setExpanded] = useState(false)
   return (
-    <Card className="board-surface grid gap-2.5 p-3.5 text-sm">
+    <Card className="board-settings-card grid gap-2.5 p-3.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={run.error ? "destructive" : "secondary"}>{runLabels[run.status]}</Badge>
         <time className="text-xs text-muted-foreground">{new Date(run.started).toLocaleString()}</time>

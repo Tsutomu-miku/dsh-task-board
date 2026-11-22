@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Columns3, FolderOpen, Plus, Settings2 } from "lucide-react"
+import { FolderOpen, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "./components/ui/alert"
 import { Button } from "./components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select"
@@ -42,27 +42,24 @@ export function App({ openSession }: { openSession: (id: string) => void }) {
       <div className="dsh-task-board" data-task-board>
         {task ? <ConversationPage key={task.id} task={task} executor={board?.executors.find(row => row.id === task.executorId)}
           running={running} close={() => setSelected(null)} save={save} openSession={openSession} /> :
-        <div className="board-layout mx-auto grid max-w-[88rem] gap-4 px-4 py-5 md:gap-5 md:px-7 md:py-7">
-          <header className="board-surface flex flex-wrap items-center justify-between gap-4 p-4 md:px-5">
-            <h1 className="flex items-center gap-3 text-xl font-semibold tracking-tight">
-              <span className="board-section-icon grid size-10 place-items-center rounded-xl"><Columns3 className="size-5" aria-hidden="true" /></span>
-              任务看板
-            </h1>
-            <nav aria-label="任务看板导航" className="board-nav flex gap-1 rounded-xl border border-transparent p-1">
-              <Button size="sm" variant="ghost" onClick={() => setPage("board")} aria-current={page === "board" ? "page" : undefined}><Columns3 aria-hidden="true" />看板</Button>
-              <Button size="sm" variant="ghost" onClick={() => setPage("executors")} aria-current={page === "executors" ? "page" : undefined}><Settings2 aria-hidden="true" />执行器</Button>
-            </nav>
+        <div className="board-layout">
+          <header data-window-drag className="board-heading flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-xl leading-7 font-medium">任务看板</h1>
+            {page === "board" && <Button className="board-primary-action" size="sm" disabled={!board?.defaultExecutor} onClick={() => setCreating(true)}><Plus aria-hidden="true" />新建任务</Button>}
           </header>
+          <div className="board-toolbar flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <nav aria-label="任务看板导航" className="board-nav flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setPage("board")} aria-current={page === "board" ? "page" : undefined}>看板</Button>
+              <Button size="sm" variant="ghost" onClick={() => setPage("executors")} aria-current={page === "executors" ? "page" : undefined}>执行器</Button>
+            </nav>
+            {board && page === "board" && <Select value={workspace} onValueChange={setWorkspace}>
+              <SelectTrigger size="sm" aria-label="按工作目录筛选" className="board-workspace min-w-0 max-w-full"><FolderOpen className="size-3.5 shrink-0" aria-hidden="true" /><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">所有工作目录</SelectItem>{workspaces.map(dir => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}</SelectContent>
+            </Select>}
+          </div>
           {(error || moveError) && <Alert variant="destructive"><AlertDescription>{error || moveError}</AlertDescription></Alert>}
           {board && page === "executors" && <ExecutorsPanel executors={board.executors} preferred={board.defaultExecutor} save={save} />}
           {board && page === "board" && <>
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-0.5">
-              <Select value={workspace} onValueChange={setWorkspace}>
-                <SelectTrigger aria-label="按工作目录筛选" className="min-w-0 max-w-full bg-card"><FolderOpen className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">所有工作目录</SelectItem>{workspaces.map(dir => <SelectItem key={dir} value={dir}>{dir}</SelectItem>)}</SelectContent>
-              </Select>
-              <Button className="shadow-sm" disabled={!board.defaultExecutor} onClick={() => setCreating(true)}><Plus aria-hidden="true" />新建任务</Button>
-            </div>
             {!board.defaultExecutor && <p className="text-sm text-muted-foreground">请在执行器页面启用一个执行器。</p>}
             <BoardView cards={cards} executors={board.executors} open={setSelected} move={move} />
           </>}
