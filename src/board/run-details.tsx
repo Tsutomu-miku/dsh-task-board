@@ -33,7 +33,7 @@ function RunLog({ id, active }: { id: string; active: boolean }) {
   if (!entries) return <p className="text-muted-foreground">正在加载日志…</p>
   if (!entries.length) return <p className="text-muted-foreground">暂无运行事件</p>
   return (
-    <ol aria-label="运行日志" className="grid max-h-60 list-none gap-2 overflow-auto rounded-md bg-muted/60 p-3 text-xs">
+    <ol aria-label="运行日志" className="grid max-h-60 list-none gap-2 overflow-auto rounded-lg border bg-muted/60 p-3 text-xs">
       {entries.map(entry => <li key={entry.seq} className="grid grid-cols-[auto_1fr] gap-3">
         <time className="whitespace-nowrap text-muted-foreground">{new Date(entry.at).toLocaleTimeString()}</time>
         <div className="min-w-0"><span className="mr-2 font-medium">{kinds[entry.kind]}</span><span className="whitespace-pre-wrap wrap-anywhere">{entry.message}</span></div>
@@ -46,7 +46,7 @@ export function RunDetails({ run, openSession }: { run: Run; openSession: (id: s
   const active = run.status === "running"
   const [expanded, setExpanded] = useState(false)
   return (
-    <Card className="grid gap-2 rounded-lg p-3 text-sm">
+    <Card className="board-surface grid gap-2.5 p-3.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={run.error ? "destructive" : "secondary"}>{runLabels[run.status]}</Badge>
         <time className="text-xs text-muted-foreground">{new Date(run.started).toLocaleString()}</time>

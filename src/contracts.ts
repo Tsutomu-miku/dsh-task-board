@@ -13,10 +13,10 @@ export type Environment = {
 
 export type Save = (input: object) => Promise<void>
 export const columns = [
-  { status: "todo", label: "待办", mark: "bg-slate-400" },
-  { status: "running", label: "执行中", mark: "bg-sky-600" },
-  { status: "review", label: "待验收", mark: "bg-amber-500" },
-  { status: "done", label: "完成", mark: "bg-emerald-500" },
+  { status: "todo", label: "待办" },
+  { status: "running", label: "执行中" },
+  { status: "review", label: "待验收" },
+  { status: "done", label: "完成" },
 ] as const
 export const runLabels = {
   running: "运行中", succeeded: "成功", failed: "失败", stopped: "已停止", interrupted: "已中断",

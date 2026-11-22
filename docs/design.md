@@ -31,9 +31,11 @@ DSH Web 的主面板与工作区导航使用 Cordis 的扩展接口，交付前�
 | `server/runners/` | 与 DSH 会话和 Codex CLI 交互，将运行结果和事件交给看板。适配器不直接写数据库。 |
 | `src/client.tsx`、`src/app.tsx` | 注册 DSH 面板和导航，组织功能页面和共享请求状态。 |
 | `src/board/`、`src/executors/` | 按功能维护卡片、编辑表单、运行详情和执行器列表。 |
-| `src/components/ui/`、`src/styles.css` | shadcn 组件与宿主主题映射。控件不持有业务状态。 |
+| `src/components/ui/`、`src/styles.css`、`src/surfaces.css` | shadcn 控件、DSH 主题映射和插件内卡片、列、会话输入区的表面样式。控件不持有业务状态。 |
 
 依赖从入口指向各模块。HTTP 层调用看板服务，服务依赖存储与执行适配器。前端和后端的边界是 JSON 请求与响应。常见的新增操作应能限定在所属功能、接口接线和对应测试。
+
+面板与弹层共用一套主题映射。背景取 DSH 的模块底色，卡片取宿主表面色，阴影与边框标示层级。状态色沿用宿主语义色。看板根据主面板的可用宽度选用四列、两列或一列，展开侧栏后也能适配。
 
 ## 数据与生命周期
 
@@ -71,6 +73,6 @@ npm test
 npm run build
 npm pack
 dsh_check_home=$(mktemp -d)
-DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.5.0.tgz"
+DSH_HOME="$dsh_check_home" dsh plugin --profile web add "$PWD/dsh-task-board-0.5.1.tgz"
 DSH_HOME="$dsh_check_home" dsh web --port 0 --no-open
 ```
