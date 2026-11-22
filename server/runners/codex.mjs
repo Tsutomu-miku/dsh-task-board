@@ -1,4 +1,5 @@
 import { fork } from "node:child_process"
+import { mkdirSync } from "node:fs"
 import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 
@@ -15,15 +16,18 @@ export function codexArgs(session, sandbox, model) {
   return [...args, "-"]
 }
 
-export function runCodex({ workdir, prompt, session, sandbox, model, signal, onSession, onEvent, onPreview }) {
+export function runCodex({ workdir, prompt, session, sandbox, model, tempDir, signal, onSession, onEvent, onPreview }) {
   const stopResult = reason => ({
     status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
     error: reason === "timeout" ? "Codex 运行超过 30 分钟，进程已停止。" : null,
   })
   if (signal.aborted) return Promise.resolve(stopResult(signal.reason))
   const args = codexArgs(session, sandbox, model)
+  // A detached DSH Web can outlive the temporary directory of its launcher.
+  mkdirSync(tempDir, { recursive: true, mode: 0o700 })
+  const env = { ...process.env, TMPDIR: tempDir, TMP: tempDir, TEMP: tempDir }
   return new Promise(resolve => {
-    const child = fork(worker, args, { cwd: workdir, detached: true, execArgv: [], stdio: ["pipe", "pipe", "ignore", "ipc"] })
+    const child = fork(worker, args, { cwd: workdir, env, detached: true, execArgv: [], stdio: ["pipe", "pipe", "ignore", "ipc"] })
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
     let output = ""
     let error

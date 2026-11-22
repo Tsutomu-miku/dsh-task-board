@@ -19,6 +19,7 @@ export function apply(ctx, config = {}) {
   if (!["read-only", "workspace-write"].includes(codexSandbox)) throw new Error("invalid dsh-task-board Codex sandbox")
   const dataDir = join(ctx.profileContext.dir, "task-board")
   mkdirSync(dataDir, { recursive: true, mode: 0o700 })
+  const codexTempDir = join(dataDir, "codex-tmp")
   const environment = createEnvironment(ctx)
   const board = openBoard({ database: join(dataDir, "board.sqlite"), workdir, codexSandbox,
     presets: () => ctx.agentPresets.list(),
@@ -26,7 +27,7 @@ export function apply(ctx, config = {}) {
     async run(options) {
       const { sandbox, model } = options.executor
       if (model) validateModel(model, await environment.models(options.engine, options.workdir))
-      return options.engine === "dsh" ? runDsh(ctx, options) : runCodex({ ...options, sandbox, model })
+      return options.engine === "dsh" ? runDsh(ctx, options) : runCodex({ ...options, sandbox, model, tempDir: codexTempDir })
     },
   })
   ctx.effect(() => () => board.close())
