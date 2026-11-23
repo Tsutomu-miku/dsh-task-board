@@ -45,6 +45,7 @@
 
 - 沿用既有 SQLite 表结构。执行过程从 `run_events` 按顺序读取，活动运行仅请求上次序号之后的事件。新版本保留每次运行的全部事件行，单条过长的文本会标明截断。历史记录以原来保存的内容为准。
 - 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。
+- 已关联会话的 DSH 卡片直接调用 `uiWorkspace.openSession`。第一次提交卡片任务后等待同一次运行获得会话 ID，再用同一接口切换页面。该会话的原生页头通过 `conversation.session.header.utilities` 提供任务详情入口。从看板发起的运行仍记录卡片状态，从原生输入框发出的追问由 DSH 会话处理。Codex 运行用自己的 thread ID 和事件接口，保留看板会话页。 [DSH 会话导航](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-workspace/README.zh.md)
 - 验证流程：
 
 ```sh

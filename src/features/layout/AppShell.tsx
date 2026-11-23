@@ -11,10 +11,10 @@ import { ExecutorsPage } from "../executors/ExecutorsPage"
 
 type ActiveSection = "board" | "executors"
 
-export function AppShell({ openSession }: { openSession: (id: string) => void }) {
+export function AppShell({ initialTaskId, openSession }: { initialTaskId: string | null; openSession: (id: string) => void }) {
   const { board, loading, error, save } = useBoard()
   const [section, setSection] = useState<ActiveSection>("board")
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId)
   const [creatingTask, setCreatingTask] = useState(false)
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
 
@@ -29,6 +29,12 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
   const selectedTask = board?.cards.find(card => card.id === selectedTaskId) ?? null
   const runningTask = board?.cards.find(card => card.status === "running")
   const enabledExecutors = board?.executors.filter(item => item.enabled).length ?? 0
+
+  function openTask(id: string) {
+    const task = board?.cards.find(row => row.id === id)
+    if (task?.engine === "dsh" && task.session) openSession(task.session)
+    else setSelectedTaskId(id)
+  }
 
   return (
     <BoardPortalContext.Provider value={portalRoot}>
@@ -64,7 +70,7 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
                 {runningTask && (
                   <button
                     type="button"
-                    onClick={() => setSelectedTaskId(runningTask.id)}
+                    onClick={() => openTask(runningTask.id)}
                     className="inline-flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-running)_28%,transparent)] bg-[var(--status-running-soft)] px-3 text-xs font-medium text-[var(--status-running)] transition-opacity hover:opacity-85"
                     title={`查看正在执行的任务：${runningTask.title}`}
                   >
@@ -135,7 +141,7 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
               section === "board" ? (
                 <BoardPage
                   board={board}
-                  onOpenTask={setSelectedTaskId}
+                  onOpenTask={openTask}
                   onOpenCreate={() => setCreatingTask(true)}
                   onOpenExecutors={() => setSection("executors")}
                   save={save}

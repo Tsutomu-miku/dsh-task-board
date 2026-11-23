@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowLeft, ExternalLink, FolderOpen, History, Pencil } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { EngineChip } from "../../shared/components/engine-badge"
 import { TaskStatusIcon, TaskStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
-import { COLUMNS, type BoardSaveFn, type Executor, type TaskItem, type TaskStatus } from "../../shared/types/board"
+import { COLUMNS, type BoardAction, type BoardSaveFn, type Executor, type TaskItem, type TaskStatus } from "../../shared/types/board"
 import { TaskFormDialog } from "../board/TaskFormDialog"
 import { ComposerBox } from "./ComposerBox"
 import { MessageStream } from "./MessageStream"
@@ -37,7 +37,27 @@ export function ConversationView({
   const [showHistory, setShowHistory] = useState(false)
   const [editing, setEditing] = useState(false)
   const [moveError, setMoveError] = useState("")
+  const [nativeLaunch, setNativeLaunch] = useState<{ previous?: string }>()
   const active = task.status === "running"
+  const latest = task.runs[0]
+
+  useEffect(() => {
+    if (!nativeLaunch || !latest || latest.id === nativeLaunch.previous) return
+    if (latest.session) {
+      setNativeLaunch(undefined)
+      openSession(latest.session)
+    } else if (latest.status !== "running") setNativeLaunch(undefined)
+  }, [nativeLaunch, latest, openSession])
+
+  async function submit(input: BoardAction) {
+    const opensNative = input.action === "run" && task.engine === "dsh"
+    if (opensNative) setNativeLaunch({ previous: latest?.id })
+    try { await save(input) }
+    catch (err) {
+      if (opensNative) setNativeLaunch(undefined)
+      throw err
+    }
+  }
 
   async function handleStatusChange(status: TaskStatus) {
     setMoveError("")
@@ -133,7 +153,7 @@ export function ConversationView({
 
       <MessageStream task={task} executor={executor} transcript={transcript} error={error} />
 
-      <ComposerBox task={task} executor={executor} running={running} save={save} />
+      <ComposerBox task={task} executor={executor} running={running} save={submit} />
 
       {showHistory && (
         <RunHistoryDialog task={task} onClose={() => setShowHistory(false)} openSession={openSession} />
