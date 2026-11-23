@@ -32,7 +32,7 @@
 | `src/shared/` | 共享类型契约（`types/board.ts`）、类型化 API 客户端（`api/client.ts`）、状态与环境 Hooks（`hooks/`）、shadcn 原子组件（`components/ui/`）及引擎/状态/模型组件。 |
 | `src/features/layout/` | `AppShell` 顶栏、运行中快捷胶囊、分段导航与全局视图切换。 |
 | `src/features/board/` | 看板页工具栏（搜索、工作目录/执行器筛选、看板/列表切换）、四列拖拽泳道、任务卡片、列表视图、任务新建/编辑弹窗与删除确认。 |
-| `src/features/conversation/` | 任务会话页、流式回复、浮动输入区、始终可见的运行活动和状态流转弹窗。 |
+| `src/features/conversation/` | 任务会话页、流式回复、浮动输入区、可折叠的运行活动和状态流转弹窗。 |
 | `src/features/executors/` | 执行器管理页：环境健康概览、双列设置卡片、执行器编辑弹窗。 |
 
 ## 视觉与样式规范
@@ -45,7 +45,7 @@
 
 - 沿用既有 SQLite 表结构。执行过程从 `run_events` 按顺序读取，活动运行仅请求上次序号之后的事件。新版本保留每次运行的全部事件行，单条过长的文本会标明截断。历史记录以原来保存的内容为准。
 - 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。
-- 看板会话通过 `src/styles/conversation.css` 使用 DSH 原生主题变量。用户消息使用 DSH 气泡底色，执行过程采用原生会话的细分隔和单列步骤，输入框使用 DSH 的柔和阴影与圆角。执行步骤在看板会话中展开显示。 [原生消息样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/MessageItem.module.css) · [原生执行过程样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/TurnProcessNodeView.module.css) · [原生输入区样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css)
+- 看板会话通过 `src/styles/conversation.css` 使用 DSH 原生主题变量。用户消息使用 DSH 气泡底色，执行过程采用原生会话的细分隔和单列步骤，输入框使用 DSH 的柔和阴影与圆角。执行步骤默认折叠，标题保留运行状态和事件数，展开即可查看实时明细。 [原生消息样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/MessageItem.module.css) · [原生执行过程样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/TurnProcessNodeView.module.css) · [原生输入区样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css)
 - 验证流程：
 
 ```sh

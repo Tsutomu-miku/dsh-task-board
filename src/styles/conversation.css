@@ -28,20 +28,25 @@
     line-height: calc(18px + var(--dsh-content-font-delta-secondary, 0px));
   }
 
-  .conversation-activity {
-    display: grid;
-    gap: 8px;
-  }
-
   .conversation-activity-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 0;
-    padding-bottom: 8px;
+    padding-block: 4px;
+    list-style: none;
+    cursor: pointer;
     border-bottom: var(--board-hairline) solid var(--dsw-alias-border-l2, var(--board-line));
     color: var(--dsw-alias-label-secondary, var(--board-text-secondary));
     font-size: var(--dsh-content-font-size, 14px);
     line-height: calc(24px + var(--dsh-content-font-delta, 0px));
     font-weight: 400;
   }
+
+  .conversation-activity-heading::-webkit-details-marker { display: none; }
+  .conversation-activity-heading:focus-visible { outline-offset: 2px; }
+  .conversation-activity > details[open] > summary .conversation-activity-chevron { rotate: 90deg; }
+  .conversation-activity-body { padding-top: 8px; }
 
   .conversation-activity-list {
     display: grid;
