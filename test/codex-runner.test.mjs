@@ -3,7 +3,7 @@ import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { runCodex } from "../server/runners/codex.mjs"
+import { runCodex } from "../server/runners/codex/runner.mjs"
 
 test("Codex uses its profile temp directory after the launcher temp directory vanishes", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "dsh-codex-runner-")))

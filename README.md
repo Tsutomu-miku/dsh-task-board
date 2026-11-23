@@ -1,28 +1,26 @@
 # DSH 任务看板
 
-以 DSH Web 插件管理本机任务、DSH 和 Codex 执行器。看板、配置表单与运行详情使用 shadcn/ui，并跟随 DSH 的主题和字体。
+面向 DSH Web 的本机任务看板插件，统一管理 DSH 原生会话与 Codex CLI 任务流转、可续跑会话、运行日志与执行器配置。基于 TypeScript、shadcn/ui、Tailwind CSS v4 与 Lucide Icons 构建，深度适配 DSH 浅色与深色主题。
+
+## 核心能力
+
+- **看板 & 列表双视图**：支持「待办 / 执行中 / 待验收 / 已完成」四列拖拽流转，以及紧凑列表视图，提供关键词搜索、工作目录与执行器组合筛选。
+- **完整任务管理**：支持新建、编辑（标题/执行器/工作目录/说明）、安全删除任务卡片，WSL 环境下支持直接填写 Windows 路径并自动转换。
+- **可续跑会话体验**：打开卡片即进入原生风格会话页，支持流式输出预览、带一键复制的 Markdown 代码块、单次切换模型/推理强度、另起新会话、查看结构化运行事件日志与跳转 DSH 原生会话。
+- **执行器集中配置**：统一管理 DSH / Codex 执行器、默认模型、推理强度、固定工作目录、DSH 预设与 Codex 沙箱权限。
 
 ## 安装与升级
 
-已验证 DSH `0.2.1-rc.5`、Node.js 22.23.1 和 WSL/Linux。需要 Node.js 22.13 或以上、`dsh` 和 `pnpm`。执行 Codex 任务还需要本机的 `codex` CLI 和登录状态。
+已验证 DSH `0.2.2-rc.5`、Node.js 22 与 WSL/Linux。
 
 ```sh
-dsh plugin --profile web add ./dsh-task-board-0.5.0.tgz
+dsh plugin --profile web add ./dsh-task-board-0.6.0.tgz
 dsh web
 ```
 
-升级时先等正在执行的任务结束，再重启 Web。原有 0.2 卡片和运行历史会自动关联到对应的默认执行器。保持同一个 Web profile 即可沿用数据。
+升级完全兼容 v0.2–v0.5 的 `task-board/board.sqlite` 数据库，保持同一个 Web profile 即可无损沿用历史任务、会话与运行记录。
 
-## 使用
-
-1. 从 DSH 侧栏打开「任务看板」，切到「执行器」编辑配置。可以选模型，也可以沿用工具的默认模型。推理强度选项由该模型的目录提供。
-2. 在「看板」新建卡片并选择执行器。执行器设置了固定目录时，新会话使用该目录。默认目录由 Web 启动目录决定。
-3. 打开卡片进入任务会话。发送第一条任务消息后，可以直接追问，默认继续使用原会话。页头可打开「运行记录」或 DSH 原生会话。
-4. 成功后的卡片进入「待验收」。可以拖动卡片或通过详情菜单调整状态。
-
-SQLite 数据在 Web profile 下的 `task-board/board.sqlite`。每个 profile 同时执行一张卡片。宿主异常退出后，进行中的运行会标记为中断，保留运行记录和已保存的会话。
-
-## 开发
+## 开发与验证
 
 ```sh
 npm ci
@@ -32,4 +30,4 @@ npm run build
 npm pack
 ```
 
-`npm test` 覆盖旧库迁移、写入锁、默认执行器、停止竞争和续跑配置。打包后使用隔离的 DSH Web profile 验证浏览器行为，详见[设计与验收](docs/design.md)。第三方组件版权见 [SHADCN-LICENSE.md](SHADCN-LICENSE.md)。
+模块划分与视觉规范见 [docs/design.md](docs/design.md)。第三方 UI 许可见 [SHADCN-LICENSE.md](SHADCN-LICENSE.md)。

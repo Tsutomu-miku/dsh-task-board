@@ -3,20 +3,24 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { openBoard } from "../server/board/service.mjs"
-import { followDshPreview } from "../server/runners/dsh-preview.mjs"
+import { openBoard } from "../server/domain/board-service.mjs"
+import { followDshPreview } from "../server/runners/dsh/preview.mjs"
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
 test("conversation keeps committed replies, isolates previews and resumes the same session after restart", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dsh-board-conversation-"))
   const calls = []
-  const options = { database: join(dir, "board.sqlite"), workdir: dir, run(callbacks) {
-    return new Promise(resolve => {
-      calls.push({ callbacks, resolve })
-      callbacks.signal.addEventListener("abort", () => resolve({ status: "interrupted" }), { once: true })
-    })
-  } }
+  const options = {
+    database: join(dir, "board.sqlite"),
+    workdir: dir,
+    run(callbacks) {
+      return new Promise(resolve => {
+        calls.push({ callbacks, resolve })
+        callbacks.signal.addEventListener("abort", () => resolve({ status: "interrupted" }), { once: true })
+      })
+    },
+  }
   let board = openBoard(options)
   try {
     const active = board.act({ action: "create", title: "任务", prompt: "第一条" })

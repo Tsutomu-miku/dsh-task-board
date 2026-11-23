@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { openBoard } from "../server/board/service.mjs"
-import { codexArgs } from "../server/runners/codex.mjs"
+import { openBoard } from "../server/domain/board-service.mjs"
+import { codexArgs } from "../server/runners/codex/runner.mjs"
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
@@ -14,12 +14,15 @@ test("profile storage fences other hosts and retains transitions, results and se
   const calls = []
   let board
   try {
-    board = openBoard({ ...config, run(options) {
-      return new Promise(done => {
-        calls.push({ options, done })
-        options.signal.addEventListener("abort", () => done({ status: "stopped" }), { once: true })
-      })
-    } })
+    board = openBoard({
+      ...config,
+      run(options) {
+        return new Promise(done => {
+          calls.push({ options, done })
+          options.signal.addEventListener("abort", () => done({ status: "stopped" }), { once: true })
+        })
+      },
+    })
     assert.throws(() => openBoard(config), /locked/)
     const create = engine => board.act({ action: "create", title: "测试", prompt: "运行检查", engine })
     const task = create("codex")
@@ -51,6 +54,54 @@ test("profile storage fences other hosts and retains transitions, results and se
     assert.deepEqual(read().history.map(item => item.to), ["todo", "running", "review", "running", "todo", "done"])
   } finally {
     await board?.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("cards support per-card workdir, editing metadata, and cascading deletion when idle", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "task-board-crud-"))
+  const sub = join(dir, "sub-project")
+  await mkdir(sub)
+  const board = openBoard({
+    database: join(dir, "board.sqlite"),
+    workdir: dir,
+    async run({ onSession, onEvent }) {
+      onSession("session-dsh")
+      onEvent("output", "已完成分析")
+      return { status: "succeeded", output: "已完成分析" }
+    },
+  })
+
+  try {
+    const created = board.act({ action: "create", title: "初始标题", prompt: "初始说明", workdir: sub })
+    assert.equal(created.workdir, sub)
+
+    board.act({ action: "run", id: created.id, from: "todo", prompt: "初始说明" })
+    await tick()
+    const runId = board.read().cards[0].runs[0].id
+    assert.equal(board.conversation(created.id).replies.length, 1)
+    assert.ok(board.events(runId).length > 0)
+
+    const updated = board.act({
+      action: "update",
+      id: created.id,
+      from: "review",
+      title: "更新后标题",
+      prompt: "更新后说明",
+      executorId: "local-codex",
+      workdir: dir,
+    })
+    assert.equal(updated.title, "更新后标题")
+    assert.equal(updated.engine, "codex")
+    assert.equal(updated.session, null)
+    assert.equal(updated.workdir, dir)
+
+    board.act({ action: "delete", id: created.id, from: "review" })
+    assert.equal(board.read().cards.length, 0)
+    assert.equal(board.events(runId).length, 0)
+    assert.throws(() => board.conversation(created.id), /找不到/)
+  } finally {
+    await board.close()
     await rm(dir, { recursive: true, force: true })
   }
 })

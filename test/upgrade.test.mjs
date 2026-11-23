@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { test } from "node:test"
-import { openBoard } from "../server/board/service.mjs"
+import { openBoard } from "../server/domain/board-service.mjs"
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
@@ -14,10 +14,26 @@ test("upgrading v0.2 preserves cards, sessions and output, and marks unfinished 
   const old = new DatabaseSync(database)
   old.exec("CREATE TABLE cards (id TEXT PRIMARY KEY, created INTEGER NOT NULL, data TEXT NOT NULL)")
   const write = old.prepare("INSERT INTO cards VALUES (?, ?, ?)")
-  const completed = { id: "done", title: "Completed", engine: "codex", workdir: dir, status: "done", session: "saved-session", history: [],
-    runs: [{ id: "completed", session: "saved-session", status: "succeeded", output: "old result" }] }
-  const interrupted = { id: "active", title: "Active", engine: "dsh", workdir: dir, status: "running", session: "dsh-session", history: [],
-    runs: [{ id: "crashed", session: "dsh-session", status: "running", output: "partial output" }] }
+  const completed = {
+    id: "done",
+    title: "Completed",
+    engine: "codex",
+    workdir: dir,
+    status: "done",
+    session: "saved-session",
+    history: [],
+    runs: [{ id: "completed", session: "saved-session", status: "succeeded", output: "old result" }],
+  }
+  const interrupted = {
+    id: "active",
+    title: "Active",
+    engine: "dsh",
+    workdir: dir,
+    status: "running",
+    session: "dsh-session",
+    history: [],
+    runs: [{ id: "crashed", session: "dsh-session", status: "running", output: "partial output" }],
+  }
   for (const [index, card] of [completed, interrupted].entries()) {
     const created = Date.now() + index
     write.run(card.id, created, JSON.stringify({ ...card, created }))
@@ -51,9 +67,13 @@ test("named executors persist settings and run snapshots, including events and r
   const alternate = join(dir, "alternate")
   await mkdir(alternate)
   const calls = []
-  const board = openBoard({ database: join(dir, "board.sqlite"), workdir: dir, run(options) {
-    return new Promise(resolve => { calls.push({ options, resolve }) })
-  } })
+  const board = openBoard({
+    database: join(dir, "board.sqlite"),
+    workdir: dir,
+    run(options) {
+      return new Promise(resolve => { calls.push({ options, resolve }) })
+    },
+  })
   try {
     const executor = await board.act({ action: "save-executor", engine: "codex", name: "Review", workdir: dir, sandbox: "workspace-write" })
     await board.act({ action: "set-default-executor", id: executor.id })

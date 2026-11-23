@@ -1,0 +1,348 @@
+.dsh-task-board[data-task-board] {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  background-color: var(--board-canvas);
+}
+
+@scope (.dsh-task-board) {
+  @layer base {
+    *, *::before, *::after {
+      box-sizing: border-box;
+      border: 0 solid var(--board-line);
+    }
+    :where(h1, h2, h3, h4, p, pre, dl, dd, ul, ol) {
+      margin: 0;
+    }
+    :where(button, input, textarea, select) {
+      font: inherit;
+      color: inherit;
+      background: transparent;
+    }
+    :where(button:not(:disabled)) {
+      cursor: pointer;
+    }
+    :where(svg) {
+      display: block;
+    }
+  }
+
+  /* Layout containers */
+  .board-shell {
+    container: task-board / inline-size;
+    max-width: 1380px;
+    margin-inline: auto;
+    padding: 0 clamp(20px, 3vw, 40px) 48px;
+  }
+
+  .board-shell-narrow {
+    max-width: 980px;
+    margin-inline: auto;
+  }
+
+  .board-header {
+    padding-top: 24px;
+    padding-bottom: 18px;
+  }
+
+  /* Responsive Kanban & Executor grids */
+  .kanban-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  @container task-board (min-width: 34rem) {
+    .kanban-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @container task-board (min-width: 56rem) {
+    .kanban-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .executor-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  @container task-board (min-width: 44rem) {
+    .executor-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Segmented navigation pill */
+  .segmented-nav {
+    background: var(--board-lane);
+    border: var(--board-hairline) solid var(--board-line);
+    border-radius: 12px;
+    padding: 3px;
+  }
+
+  .segmented-tab {
+    border-radius: 9px;
+    color: var(--board-text-secondary);
+    transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .segmented-tab[aria-current="page"],
+  .segmented-tab[aria-pressed="true"] {
+    background: var(--board-card);
+    color: var(--board-text-primary);
+    box-shadow: var(--board-shadow-card);
+  }
+
+  /* Recessed Kanban column lane */
+  .kanban-lane {
+    background: var(--board-lane);
+    border: var(--board-hairline) solid var(--board-line-soft);
+    border-radius: var(--dsw-radius-lg, 16px);
+    padding: 12px;
+    min-height: 220px;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .kanban-lane[data-drop-target="true"] {
+    border-color: var(--board-brand);
+    background: color-mix(in srgb, var(--board-brand) 6%, var(--board-lane));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--board-brand) 22%, transparent);
+  }
+
+  /* Elevated task card */
+  .task-card-surface {
+    background: var(--board-card);
+    border-radius: 14px;
+    box-shadow: var(--board-shadow-card);
+    transition: transform 150ms cubic-bezier(0.2, 0, 0, 1), box-shadow 150ms ease, background-color 150ms ease;
+  }
+
+  .task-card-surface[data-running="true"] {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--status-running) 45%, transparent),
+      0 4px 16px -4px color-mix(in srgb, var(--status-running) 20%, transparent);
+  }
+
+  @media (hover: hover) {
+    .task-card-surface:hover {
+      background: var(--board-card-hover);
+      box-shadow: var(--board-shadow-card-hover);
+      transform: translateY(-1px);
+    }
+    .task-card-surface[data-running="true"]:hover {
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--status-running) 60%, transparent),
+        0 6px 20px -4px color-mix(in srgb, var(--status-running) 26%, transparent);
+    }
+  }
+
+  .task-card-trigger::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+  }
+
+  .task-card-trigger:focus-visible {
+    outline: none;
+  }
+
+  .task-card-trigger:focus-visible::after {
+    outline: var(--dsw-focus-ring-width, 2px) solid var(--board-brand);
+    outline-offset: 2px;
+  }
+
+  /* Executor / Settings surface card */
+  .settings-card-surface {
+    background: var(--board-card);
+    border: var(--board-hairline) solid var(--board-line);
+    border-radius: var(--dsw-radius-xl, 20px);
+    box-shadow: var(--board-shadow-card);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  @media (hover: hover) {
+    .settings-card-surface:hover {
+      border-color: var(--board-line-strong);
+      box-shadow: var(--board-shadow-card-hover);
+    }
+  }
+
+  /* Conversation view */
+  .conversation-topbar {
+    border-bottom: var(--board-hairline) solid var(--board-line);
+    background: color-mix(in srgb, var(--board-canvas) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .conversation-column {
+    width: 100%;
+    max-width: calc(var(--dsh-composer-card-max-width, 800px) + 48px);
+    margin-inline: auto;
+  }
+
+  .conversation-user-bubble {
+    border-radius: 18px 18px 6px 18px;
+    background: var(--dsw-specific-bubble, var(--board-recessed));
+    border: var(--board-hairline) solid var(--board-line-soft);
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  }
+
+  .conversation-composer-card {
+    --dsw-elevation-stroke-color: var(--board-line-strong);
+    border-radius: var(--dsw-radius-panel, 24px);
+    background: var(--dsw-specific-input-major, var(--board-card));
+    box-shadow: var(--board-shadow-composer);
+    transition: box-shadow 160ms ease;
+  }
+
+  .conversation-composer-card:focus-within {
+    --dsw-elevation-stroke-color: var(--board-brand);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--board-brand) 65%, transparent),
+      0 6px 24px -6px color-mix(in srgb, var(--board-brand) 16%, transparent);
+  }
+
+  .conversation-send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--dsw-alias-button-info-fill, var(--board-brand));
+    color: var(--dsw-alias-label-on-color, #ffffff);
+    transition: transform 100ms ease, background-color 120ms ease, opacity 120ms ease;
+  }
+
+  @media (hover: hover) {
+    .conversation-send-btn:hover:not(:disabled) {
+      background: var(--dsw-alias-button-info-hover, var(--board-brand));
+      transform: scale(1.03);
+    }
+  }
+
+  .conversation-stop-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--board-danger);
+    color: #ffffff;
+    transition: transform 100ms ease, opacity 120ms ease;
+  }
+
+  /* Markdown typography inside assistant replies */
+  .task-markdown {
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+    color: var(--board-text-primary);
+  }
+
+  .task-markdown > * + * {
+    margin-top: 0.75rem;
+  }
+
+  .task-markdown :where(h1, h2, h3, h4) {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-top: 1.15rem;
+  }
+  .task-markdown h1 { font-size: 1.25em; }
+  .task-markdown h2 { font-size: 1.12em; }
+  .task-markdown h3 { font-size: 1.04em; }
+
+  .task-markdown :where(ul, ol) {
+    padding-inline-start: 1.45rem;
+  }
+  .task-markdown ul { list-style: disc; }
+  .task-markdown ol { list-style: decimal; }
+  .task-markdown li + li { margin-top: 0.25rem; }
+
+  .task-markdown a {
+    color: var(--dsw-alias-link, var(--board-brand));
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .task-markdown a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .task-markdown :where(pre, code) {
+    font-family: var(--ds-font-family-code, var(--dsh-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace));
+  }
+
+  .task-markdown :not(pre) > code {
+    font-size: 0.875em;
+    border-radius: 5px;
+    padding: 0.14rem 0.38rem;
+    background: var(--dsw-alias-markdown-inline-code, var(--board-recessed));
+    border: var(--board-hairline) solid var(--board-line-soft);
+  }
+
+  .task-markdown blockquote {
+    margin-inline: 0;
+    padding: 0.25rem 0 0.25rem 0.9rem;
+    border-inline-start: 2.5px solid var(--board-line-strong);
+    color: var(--board-text-secondary);
+  }
+
+  .task-markdown hr {
+    border-top: var(--board-hairline) solid var(--board-line);
+    margin-block: 1rem;
+  }
+
+  .task-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+  }
+  .task-markdown :where(th, td) {
+    padding: 0.45rem 0.7rem;
+    border: var(--board-hairline) solid var(--board-line);
+    text-align: left;
+  }
+  .task-markdown th {
+    background: var(--board-lane);
+    font-weight: 500;
+  }
+
+  /* Dialogs & Popovers aligned to DSH surfaces */
+  [data-slot="dialog-content"] {
+    border: var(--board-hairline) solid var(--board-line);
+    border-radius: var(--dsw-radius-xl, 22px);
+    background: var(--board-popover);
+    box-shadow: var(--board-shadow-elevated);
+  }
+
+  [data-slot="select-content"] {
+    border: var(--board-hairline) solid var(--board-line);
+    border-radius: var(--dsw-radius-md, 12px);
+    background: var(--dsw-menu-surface-fill, var(--board-popover));
+    backdrop-filter: var(--dsw-menu-backdrop-filter, blur(24px));
+    box-shadow: var(--board-shadow-elevated);
+  }
+
+  @layer components {
+    :where([data-slot="input"], [data-slot="select-trigger"], [data-slot="textarea"]) {
+      border-width: var(--board-hairline);
+      border-radius: 10px;
+    }
+
+    :where([data-slot="button"][data-variant="outline"]) {
+      border-width: var(--board-hairline);
+    }
+  }
+
+  @layer utilities {
+    @tailwind utilities;
+  }
+}
+
+[data-platform="darwin"] .dsh-task-board .board-header {
+  padding-top: calc(24px + var(--dsh-frame-top-clearance, 0px));
+}

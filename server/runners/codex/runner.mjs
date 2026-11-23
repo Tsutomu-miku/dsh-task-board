@@ -1,0 +1,144 @@
+import { fork } from "node:child_process"
+import { mkdirSync } from "node:fs"
+import { createInterface } from "node:readline"
+import { fileURLToPath } from "node:url"
+import { UUID_PATTERN } from "../../errors.mjs"
+
+const WORKER_PATH = fileURLToPath(new URL("./worker.mjs", import.meta.url))
+const RUN_TIMEOUT_MS = 30 * 60 * 1000
+
+export function codexArgs(session, sandbox, model) {
+  if (session && !UUID_PATTERN.test(session)) {
+    throw new Error("无效的 Codex 会话编号。")
+  }
+  const args = ["exec", "--json", "--sandbox", sandbox, "--skip-git-repo-check"]
+  if (model?.effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(model.effort)}`)
+  if (session) args.push("resume", "--json")
+  if (model) args.push("--model", model.id)
+  if (session) args.push(session)
+  return [...args, "-"]
+}
+
+export function runCodex({
+  workdir,
+  prompt,
+  session,
+  sandbox,
+  model,
+  tempDir,
+  signal,
+  onSession,
+  onEvent,
+  onPreview,
+}) {
+  const mapStopResult = reason => ({
+    status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
+    error: reason === "timeout" ? "Codex 运行超过 30 分钟，进程已停止。" : null,
+  })
+
+  if (signal.aborted) return Promise.resolve(mapStopResult(signal.reason))
+
+  const args = codexArgs(session, sandbox, model)
+  // Keep TMPDIR pinned inside the persistent profile directory so detached DSH Web
+  // hosts can create Codex sandbox mounts even after a launcher's temp dir expires.
+  mkdirSync(tempDir, { recursive: true, mode: 0o700 })
+  const env = { ...process.env, TMPDIR: tempDir, TMP: tempDir, TEMP: tempDir }
+
+  return new Promise(resolve => {
+    const child = fork(WORKER_PATH, args, {
+      cwd: workdir,
+      env,
+      detached: true,
+      execArgv: [],
+      stdio: ["pipe", "pipe", "ignore", "ipc"],
+    })
+    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
+    let output = ""
+    let error
+    let confirmed = false
+    let stopReason
+    let killTimer
+
+    function killGroup(sig) {
+      if (!child.pid) return
+      try {
+        process.kill(-child.pid, sig)
+      } catch (err) {
+        if (err.code !== "ESRCH") console.error("dsh-task-board: Codex process group signal failed", err.code)
+      }
+    }
+
+    function stop(cause) {
+      if (stopReason) return
+      stopReason = cause
+      if (child.connected) child.disconnect()
+      killTimer = setTimeout(() => killGroup("SIGKILL"), 3000)
+    }
+
+    const onAbort = () => stop(signal.reason)
+    const deadline = setTimeout(() => stop("timeout"), RUN_TIMEOUT_MS)
+    signal.addEventListener("abort", onAbort, { once: true })
+
+    child.stdin.on("error", () => {})
+    child.stdin.end(prompt)
+
+    child.on("message", event => {
+      if (event?.type === "spawn-error") {
+        error = event.code === "ENOENT" ? "找不到本机 codex 命令。" : "无法启动 Codex。"
+      }
+    })
+
+    lines.on("line", line => {
+      if (line.length > 2_000_000) return
+      let event
+      try {
+        event = JSON.parse(line)
+      } catch {
+        return
+      }
+      if (event.type === "thread.started" && UUID_PATTERN.test(event.thread_id ?? "")) {
+        try {
+          onSession(event.thread_id)
+        } catch {
+          error = "无法保存 Codex 会话。"
+          stop("persistence")
+        }
+      }
+      if (event.type === "turn.started") onEvent("status", "Codex 已接收任务")
+      if (event.type === "item.started" && event.item?.type === "command_execution") {
+        const cmd = event.item.command ? `：${String(event.item.command).slice(0, 120)}` : ""
+        onEvent("tool", `Codex 执行命令${cmd}`)
+      }
+      if (event.type === "item.updated" && event.item?.type === "agent_message") {
+        onPreview(event.item.text ?? "")
+      }
+      if (event.type === "item.completed" && event.item?.type === "agent_message") {
+        output = String(event.item.text ?? "").slice(0, 16000)
+        onEvent("output", output)
+      }
+      if (event.type === "turn.completed") confirmed = true
+      if (event.type === "turn.failed") {
+        confirmed = false
+        error = event.error?.message ?? "Codex 运行失败。"
+      }
+      if (event.type === "error") error ??= event.message
+    })
+
+    child.on("error", () => {
+      error ??= "无法启动 Codex 工作进程。"
+    })
+
+    child.once("close", code => {
+      clearTimeout(deadline)
+      clearTimeout(killTimer)
+      signal.removeEventListener("abort", onAbort)
+      if (stopReason && stopReason !== "persistence") {
+        return resolve({ ...mapStopResult(stopReason), output })
+      }
+      if (code === 0 && confirmed && stopReason !== "persistence") {
+        return resolve({ status: "succeeded", output })
+      }
+      resolve({ status: "failed", output, error: error ?? "Codex 已退出，未确认任务完成。" })
+    })
+  })
+}

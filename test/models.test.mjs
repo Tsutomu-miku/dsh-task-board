@@ -5,10 +5,10 @@ import { join } from "node:path"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"
 import { test } from "node:test"
-import { openBoard } from "../server/board/service.mjs"
-import { readCodexModels } from "../server/runners/codex-models.mjs"
-import { codexArgs } from "../server/runners/codex.mjs"
-import { applyDshModel } from "../server/runners/dsh-model.mjs"
+import { openBoard } from "../server/domain/board-service.mjs"
+import { readCodexModels } from "../server/runners/codex/models.mjs"
+import { codexArgs } from "../server/runners/codex/runner.mjs"
+import { applyDshModel } from "../server/runners/dsh/model.mjs"
 
 const tick = () => new Promise(done => setImmediate(done))
 
@@ -17,12 +17,16 @@ test("defaults, run overrides and resume keep separate model selections", async 
   const select = id => ({ id, provider: "fixture" })
   const choices = ["first", "second"].map(id => ({ ...select(id), efforts: [{ id: "high" }] }))
   const selected = []
-  const board = openBoard({ database: join(home, "board.sqlite"), workdir: home,
-    models: async () => choices, async run({ executor, onSession }) {
+  const board = openBoard({
+    database: join(home, "board.sqlite"),
+    workdir: home,
+    models: async () => choices,
+    async run({ executor, onSession }) {
       selected.push(executor.model)
       onSession("local-test-session")
       return { status: "succeeded" }
-    } })
+    },
+  })
   try {
     await assert.rejects(board.act({ action: "save-executor", id: "local-dsh", name: "DSH", model: select("missing") }), /不可用/)
     const model = { ...select("first"), effort: "high" }
@@ -53,8 +57,11 @@ test("Codex initializes, reads paginated visible models and closes its own stdio
     const request = JSON.parse(String(bytes))
     requests.push(request.method)
     if (!request.id) return
-    const result = request.method === "initialize" ? {} : (request.params.cursor ? { data: [{ model: "hidden", hidden: true }, { model: "second" }], nextCursor: null }
-      : { data: [{ model: "first", displayName: "First", supportedReasoningEfforts: [{ reasoningEffort: "high" }] }], nextCursor: "page-2" })
+    const result = request.method === "initialize"
+      ? {}
+      : (request.params.cursor
+        ? { data: [{ model: "hidden", hidden: true }, { model: "second" }], nextCursor: null }
+        : { data: [{ model: "first", displayName: "First", supportedReasoningEfforts: [{ reasoningEffort: "high" }] }], nextCursor: "page-2" })
     setImmediate(() => child.stdout.write(JSON.stringify({ id: request.id, result }) + "\n"))
   })
   const models = await readCodexModels("/workspace", () => child)
