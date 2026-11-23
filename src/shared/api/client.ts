@@ -37,6 +37,7 @@ export function fetchConversation(cardId: string, signal?: AbortSignal): Promise
   return request<Transcript>(`conversation?card=${encodeURIComponent(cardId)}`, { signal })
 }
 
-export function fetchRunEvents(runId: string, signal?: AbortSignal): Promise<RunEvent[]> {
-  return request<RunEvent[]>(`events?run=${encodeURIComponent(runId)}`, { signal })
+export function fetchRunEvents(runId: string, after: number, signal?: AbortSignal): Promise<RunEvent[]> {
+  const query = new URLSearchParams({ run: runId, after: String(after) })
+  return request<RunEvent[]>(`events?${query}`, { signal })
 }

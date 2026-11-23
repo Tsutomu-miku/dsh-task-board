@@ -77,8 +77,11 @@ export function registerRoutes(ctx, { board, css, environment }) {
   })
 
   registerJson("events", "GET", request => {
-    const runId = assertUuid(new URL(request.url).searchParams.get("run"), "运行编号")
-    return board.events(runId)
+    const query = new URL(request.url).searchParams
+    const runId = assertUuid(query.get("run"), "运行编号")
+    const after = Number(query.get("after") ?? "0")
+    if (!Number.isSafeInteger(after) || after < 0) throw new BoardError(400, "无效的事件游标。")
+    return board.events(runId, after)
   })
 
   registerJson("action", "POST", async request => board.act(await parseJsonBody(request)))

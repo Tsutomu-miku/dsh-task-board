@@ -78,6 +78,7 @@ export async function runDsh(ctx, {
     let ended = false
     let result
     let settle
+    const toolNames = new Map()
     const completed = new Promise(resolve => { settle = resolve })
 
     const isOwnedMessage = message => message?.source?.kind === "user" && message.source.rpcId === requestId
@@ -110,9 +111,22 @@ export async function runDsh(ctx, {
           onEvent("output", text)
         }
       } else if (type === "tool/call" && ownedTurn === data.turn) {
-        onEvent("tool", data.name)
-      } else if (type === "tool/result" && ownedTurn === data.turn && data.error) {
-        onEvent("error", data.error.reason ?? data.error.code)
+        toolNames.set(data.callId, data.name)
+        onEvent("tool", [data.name, data.arguments].filter(Boolean).join("\n"))
+      } else if (type === "tool/result" && ownedTurn === data.turn) {
+        const message = data.message
+        const name = toolNames.get(message?.toolCallId) ?? "工具"
+        const blocks = message?.content ?? []
+        const text = blocks.filter(part => part.type === "text").map(part => part.text).join("\n")
+        const other = blocks.some(part => part.type !== "text") ? "包含非文本结果，可在 DSH 原生会话中查看。" : ""
+        const failed = Boolean(data.error || message?.isError)
+        onEvent(failed ? "error" : "tool_result", [
+          `${name} ${failed ? "失败" : "完成"}`,
+          data.error?.reason ?? data.error?.code,
+          text,
+          other,
+        ].filter(Boolean).join("\n"))
+        toolNames.delete(message?.toolCallId)
       } else if (type === "turn/end" && ownedTurn === data.turn) {
         ended = true
         result = mapTurnResult(data.reason, output)

@@ -75,9 +75,9 @@ export function openBoard({
         }
       },
 
-      events(runId) {
+      events(runId, after) {
         assertOpen()
-        return events.list(runId)
+        return events.list(runId, after)
       },
 
       conversation(cardId) {

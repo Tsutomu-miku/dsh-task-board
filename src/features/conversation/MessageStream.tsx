@@ -6,6 +6,7 @@ import { EngineAvatar } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatDuration, formatShortPath } from "../../shared/lib/format"
 import { RUN_STATUS_LABELS, type Executor, type TaskItem, type Transcript } from "../../shared/types/board"
+import { RunActivity } from "./RunActivity"
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false)
@@ -84,20 +85,26 @@ export function MessageStream({
   error: string
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const autoFollowRef = useRef(true)
   const newestRun = task.runs[0]
-  const latestReplyId = transcript?.replies[transcript.replies.length - 1]?.id
   const activePreview =
     newestRun?.status === "running" && transcript?.preview?.runId === newestRun.id
       ? transcript.preview.text
       : ""
 
   useLayoutEffect(() => {
-    const el = scrollerRef.current
-    if (el && autoFollowRef.current) {
-      el.scrollTop = el.scrollHeight
+    const container = scrollerRef.current
+    const content = contentRef.current
+    if (!container || !content) return
+    function follow() {
+      if (container && autoFollowRef.current) container.scrollTop = container.scrollHeight
     }
-  }, [newestRun?.id, newestRun?.status, newestRun?.output, latestReplyId, activePreview])
+    follow()
+    const observer = new ResizeObserver(follow)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
 
   const repliesByRun = new Map<string, { id: number; text: string }[]>()
   for (const reply of transcript?.replies ?? []) {
@@ -117,7 +124,7 @@ export function MessageStream({
       }}
       className="min-h-0 overflow-y-auto"
     >
-      <div className="conversation-column grid gap-7 px-4 py-6 md:px-6 md:py-8" role="region" aria-label="会话消息">
+      <div ref={contentRef} className="conversation-column grid gap-7 px-4 py-6 md:px-6 md:py-8" role="region" aria-label="会话消息">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -181,6 +188,8 @@ export function MessageStream({
                   {new Date(run.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </time>
               </div>
+
+              <RunActivity run={run} />
 
               {(replies.length > 0 || run.status === "running") && (
                 <section className="flex min-w-0 items-start gap-3" aria-label={`${run.executor.name} 回复`}>

@@ -32,7 +32,7 @@
 | `src/shared/` | 共享类型契约（`types/board.ts`）、类型化 API 客户端（`api/client.ts`）、状态与环境 Hooks（`hooks/`）、shadcn 原子组件（`components/ui/`）及引擎/状态/模型组件。 |
 | `src/features/layout/` | `AppShell` 顶栏、运行中快捷胶囊、分段导航与全局视图切换。 |
 | `src/features/board/` | 看板页工具栏（搜索、工作目录/执行器筛选、看板/列表切换）、四列拖拽泳道、任务卡片、列表视图、任务新建/编辑弹窗与删除确认。 |
-| `src/features/conversation/` | 任务会话页：半透明吸顶页头、流式对话气泡、带语言标和复制按钮的代码块、浮动输入区、模型切换条和运行日志时间线弹窗。 |
+| `src/features/conversation/` | 任务会话页、流式回复、浮动输入区、始终可见的运行活动和状态流转弹窗。 |
 | `src/features/executors/` | 执行器管理页：环境健康概览、双列设置卡片、执行器编辑弹窗。 |
 
 ## 视觉与样式规范
@@ -43,7 +43,8 @@
 
 ## 数据兼容与验证
 
-- 沿用既有 SQLite 表结构（`cards`、`executors`、`board_settings`、`run_events`、`assistant_replies`），v0.2–v0.5 数据库零损升级。
+- 沿用既有 SQLite 表结构。执行过程从 `run_events` 按顺序读取，活动运行仅请求上次序号之后的事件。新版本保留每次运行的全部事件行，单条过长的文本会标明截断。历史记录以原来保存的内容为准。
+- 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。
 - 验证流程：
 
 ```sh

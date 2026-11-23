@@ -1,16 +1,4 @@
-import { useEffect, useState } from "react"
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Cpu,
-  ExternalLink,
-  Info,
-  MessageSquare,
-  Terminal,
-  Wrench,
-} from "lucide-react"
+import { Clock, Cpu, ExternalLink, Terminal } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import {
@@ -20,79 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../shared/components/ui/dialog"
-import { fetchRunEvents } from "../../shared/api/client"
 import { RunStatusPill, TaskStatusPill } from "../../shared/components/status-badge"
 import { formatDuration } from "../../shared/lib/format"
-import type { RunEvent, RunRecord, TaskItem } from "../../shared/types/board"
-
-const EVENT_META: Record<RunEvent["kind"], { label: string; icon: typeof Info; color: string }> = {
-  status: { label: "状态", icon: Info, color: "text-[var(--board-brand)]" },
-  tool: { label: "工具", icon: Wrench, color: "text-[var(--engine-codex)]" },
-  output: { label: "输出", icon: MessageSquare, color: "text-[var(--status-done)]" },
-  error: { label: "错误", icon: AlertCircle, color: "text-[var(--board-danger)]" },
-}
-
-function RunEventLog({ runId, active }: { runId: string; active: boolean }) {
-  const [entries, setEntries] = useState<RunEvent[] | null>(null)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    async function load() {
-      try {
-        const events = await fetchRunEvents(runId, controller.signal)
-        if (controller.signal.aborted) return
-        setEntries(events)
-        setError("")
-      } catch (err) {
-        if (!controller.signal.aborted) setError((err as Error).message)
-      }
-      if (active && !controller.signal.aborted) {
-        timer = setTimeout(load, 1000)
-      }
-    }
-
-    void load()
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
-  }, [runId, active])
-
-  if (error) return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-  if (!entries) return <p className="text-xs text-muted-foreground">正在加载运行日志…</p>
-  if (!entries.length) return <p className="text-xs text-muted-foreground">暂无运行事件</p>
-
-  return (
-    <ol
-      aria-label="运行日志"
-      className="grid max-h-64 list-none gap-2 overflow-auto rounded-xl border border-[var(--board-line-soft)] bg-[var(--board-lane)] p-3 text-xs"
-    >
-      {entries.map(entry => {
-        const meta = EVENT_META[entry.kind]
-        const Icon = meta.icon
-        return (
-          <li key={entry.seq} className="grid grid-cols-[auto_auto_1fr] items-start gap-2.5">
-            <time className="font-mono text-[11px] whitespace-nowrap text-muted-foreground">
-              {new Date(entry.at).toLocaleTimeString()}
-            </time>
-            <span className={`inline-flex items-center gap-1 font-medium ${meta.color}`}>
-              <Icon className="size-3" aria-hidden="true" />
-              {meta.label}
-            </span>
-            <span className="min-w-0 whitespace-pre-wrap wrap-anywhere text-foreground/90">{entry.message}</span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
+import type { RunRecord, TaskItem } from "../../shared/types/board"
+import { RunActivity } from "./RunActivity"
 
 function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id: string) => void }) {
-  const [expanded, setExpanded] = useState(run.status === "running")
-
   return (
     <div className="settings-card-surface grid gap-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -117,16 +38,6 @@ function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id:
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="xs"
-          aria-expanded={expanded}
-          onClick={() => setExpanded(v => !v)}
-        >
-          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          {expanded ? "收起事件日志" : "查看事件日志"}
-        </Button>
-
         {run.session && run.executor.engine === "dsh" && (
           <Button variant="ghost" size="xs" className="text-link" onClick={() => openSession(run.session!)}>
             打开 DSH 会话
@@ -142,7 +53,7 @@ function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id:
         )}
       </div>
 
-      {expanded && <RunEventLog runId={run.id} active={run.status === "running"} />}
+      <RunActivity run={run} includeReplies />
       {run.error && (
         <Alert variant="destructive">
           <AlertDescription>{run.error}</AlertDescription>

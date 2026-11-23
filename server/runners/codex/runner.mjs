@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs"
 import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 import { UUID_PATTERN } from "../../errors.mjs"
+import { reportCodexActivity } from "./activity.mjs"
 
 const WORKER_PATH = fileURLToPath(new URL("./worker.mjs", import.meta.url))
 const RUN_TIMEOUT_MS = 30 * 60 * 1000
@@ -53,6 +54,7 @@ export function runCodex({
       stdio: ["pipe", "pipe", "ignore", "ipc"],
     })
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
+    const commandOutput = new Map()
     let output = ""
     let error
     let confirmed = false
@@ -105,10 +107,7 @@ export function runCodex({
         }
       }
       if (event.type === "turn.started") onEvent("status", "Codex 已接收任务")
-      if (event.type === "item.started" && event.item?.type === "command_execution") {
-        const cmd = event.item.command ? `：${String(event.item.command).slice(0, 120)}` : ""
-        onEvent("tool", `Codex 执行命令${cmd}`)
-      }
+      reportCodexActivity(event, onEvent, commandOutput)
       if (event.type === "item.updated" && event.item?.type === "agent_message") {
         onPreview(event.item.text ?? "")
       }
@@ -121,7 +120,10 @@ export function runCodex({
         confirmed = false
         error = event.error?.message ?? "Codex 运行失败。"
       }
-      if (event.type === "error") error ??= event.message
+      if (event.type === "error") {
+        error ??= event.message
+        if (event.message) onEvent("error", event.message)
+      }
     })
 
     child.on("error", () => {

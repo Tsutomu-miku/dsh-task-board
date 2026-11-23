@@ -71,7 +71,7 @@ export interface RunRecord {
 export interface RunEvent {
   seq: number
   at: number
-  kind: "status" | "tool" | "output" | "error"
+  kind: "status" | "tool" | "tool_result" | "output" | "error"
   message: string
 }
 
