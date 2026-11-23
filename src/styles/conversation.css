@@ -1,0 +1,125 @@
+@scope (.dsh-task-board) {
+  .conversation-topbar {
+    border-bottom: var(--board-hairline) solid var(--dsw-alias-border-l2, var(--board-line));
+    background: var(--dsw-alias-bg-base, var(--board-canvas));
+  }
+
+  .conversation-column {
+    --chat-width: var(--dsh-chat-content-width, 748px);
+    --chat-side: clamp(16px, 4vw, 40px);
+    width: 100%;
+    max-width: calc(var(--chat-width) + 2 * var(--chat-side));
+    padding-inline: var(--chat-side);
+    margin-inline: auto;
+  }
+
+  .conversation-user-bubble {
+    max-width: min(82%, 525px);
+    padding: 10px 16px;
+    border-radius: var(--dsw-radius-lg, 16px);
+    background: var(--dsw-specific-bubble, var(--board-recessed));
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  }
+
+  .conversation-meta {
+    color: var(--dsw-alias-label-secondary, var(--board-text-secondary));
+    font-size: var(--dsh-content-font-size-secondary, 13px);
+    line-height: calc(18px + var(--dsh-content-font-delta-secondary, 0px));
+  }
+
+  .conversation-activity {
+    display: grid;
+    gap: 8px;
+  }
+
+  .conversation-activity-heading {
+    margin: 0;
+    padding-bottom: 8px;
+    border-bottom: var(--board-hairline) solid var(--dsw-alias-border-l2, var(--board-line));
+    color: var(--dsw-alias-label-secondary, var(--board-text-secondary));
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+    font-weight: 400;
+  }
+
+  .conversation-activity-list {
+    display: grid;
+    gap: 4px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .conversation-activity-row {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .conversation-activity-row[data-kind="error"] .conversation-activity-icon {
+    color: var(--board-danger);
+  }
+
+  .conversation-activity-icon {
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--dsw-alias-label-tertiary, var(--board-text-secondary));
+  }
+
+  .conversation-activity-output {
+    margin: 4px 0 0;
+    padding: 8px 10px;
+    border-radius: var(--dsw-radius-md, 12px);
+    background: var(--dsw-alias-markdown-code-block, var(--board-recessed));
+    color: var(--dsw-alias-label-primary, var(--board-text-primary));
+    font-family: var(--ds-font-family-code, monospace);
+    font-size: var(--dsh-content-font-size-secondary, 13px);
+    line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  }
+
+  .conversation-dock {
+    max-width: calc(var(--chat-width) + 32px + 2 * var(--chat-side));
+  }
+
+  .conversation-composer-card {
+    --dsw-elevation-stroke-color: var(--dsw-alias-border-l2, var(--board-line));
+    border: 0;
+    border-radius: var(--dsw-radius-panel, 28px);
+    background: var(--dsw-specific-input-major, var(--board-card));
+    box-shadow: var(--dsw-elevation-soft, var(--board-shadow-composer));
+  }
+
+  .conversation-composer-card:focus-within {
+    --dsw-elevation-stroke-color: var(--dsw-alias-state-business-primary, var(--board-brand));
+  }
+
+  .conversation-input {
+    font-size: var(--dsh-content-font-size, 14px);
+    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  }
+
+  @media (pointer: coarse) {
+    .conversation-input { font-size: max(16px, var(--dsh-content-font-size, 14px)); }
+  }
+
+  .conversation-send-btn,
+  .conversation-stop-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    corner-shape: round;
+    --send-fill: var(--dsw-alias-button-info-fill, var(--board-brand));
+    background: var(--send-fill);
+    color: var(--dsw-alias-label-primary-inverted, HighlightText);
+  }
+
+  @media (hover: hover) {
+    .conversation-send-btn:hover:not(:disabled), .conversation-stop-btn:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--send-fill) 76%, var(--dsw-alias-button-info-hover, var(--send-fill)));
+    }
+  }
+}

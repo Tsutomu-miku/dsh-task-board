@@ -2,6 +2,7 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tw-animate-css";
 @import "./app.css";
+@import "./conversation.css";
 @source "../";
 @custom-variant dark (&:where([data-ds-dark-theme], [data-ds-dark-theme] *));
 

@@ -76,19 +76,19 @@ export function ComposerBox({
 
   return (
     <div className="shrink-0">
-      <form onSubmit={handleSubmit} className="conversation-column grid gap-2 px-4 pt-2 pb-4 md:px-6 md:pb-5">
+      <form onSubmit={handleSubmit} className="conversation-column conversation-dock grid gap-2 pt-2 pb-4 md:pb-5">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="conversation-composer-card grid min-w-0 gap-2 p-3">
+        <div className="conversation-composer-card grid min-w-0 gap-3 px-2.5 pt-2.5 pb-2">
           <Textarea
             value={draft}
             aria-label="发送消息"
             placeholder={resume ? "继续追问当前会话，Enter 发送，Shift+Enter 换行…" : "输入要交给执行器的任务说明…"}
-            className="max-h-48 min-h-[54px] resize-none border-0 bg-transparent px-1 py-0.5 text-[14px] leading-6 shadow-none focus-visible:ring-0"
+            className="conversation-input max-h-48 min-h-[44px] resize-none border-0 bg-transparent px-1 py-0.5 shadow-none focus-visible:ring-0"
             maxLength={16000}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {
@@ -137,7 +137,7 @@ export function ComposerBox({
                   variant={showModel || model ? "secondary" : "ghost"}
                   aria-expanded={showModel}
                   onClick={() => setShowModel(v => !v)}
-                  className="max-w-[220px] text-muted-foreground"
+                  className="ml-auto max-w-[220px] text-muted-foreground"
                 >
                   <Cpu className="size-3.5" aria-hidden="true" />
                   <span className="truncate">
@@ -147,7 +147,7 @@ export function ComposerBox({
               </>
             )}
 
-            <div className="ml-auto flex items-center gap-2.5">
+            <div className={`flex items-center gap-2.5 ${active ? "ml-auto" : ""}`}>
               {!active && (
                 <span className="hidden text-[11px] text-muted-foreground/75 sm:inline">
                   Enter 发送 · Shift+Enter 换行

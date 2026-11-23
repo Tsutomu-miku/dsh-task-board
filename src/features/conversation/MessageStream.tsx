@@ -2,7 +2,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
-import { EngineAvatar } from "../../shared/components/engine-badge"
+import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatDuration, formatShortPath } from "../../shared/lib/format"
 import { RUN_STATUS_LABELS, type Executor, type TaskItem, type Transcript } from "../../shared/types/board"
@@ -124,7 +124,7 @@ export function MessageStream({
       }}
       className="min-h-0 overflow-y-auto"
     >
-      <div ref={contentRef} className="conversation-column grid gap-7 px-4 py-6 md:px-6 md:py-8" role="region" aria-label="会话消息">
+      <div ref={contentRef} className="conversation-column grid gap-8 py-4" role="region" aria-label="会话消息">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -132,7 +132,7 @@ export function MessageStream({
         )}
 
         {!task.runs.length && (
-          <div className="mx-auto my-8 flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-[var(--board-line)] bg-[var(--board-lane)] px-6 py-8 text-center">
+          <div className="mx-auto my-12 flex max-w-lg flex-col items-center gap-4 px-6 py-8 text-center">
             <EngineAvatar engine={task.engine} size="md" />
             <div className="space-y-1.5">
               <h2 className="text-[15px] font-medium text-foreground">准备开始任务会话</h2>
@@ -179,7 +179,7 @@ export function MessageStream({
 
               <div className="flex flex-col items-end gap-1">
                 <div
-                  className="conversation-user-bubble max-w-[min(88%,38rem)] px-4 py-2.5 whitespace-pre-wrap wrap-anywhere text-foreground"
+                  className="conversation-user-bubble whitespace-pre-wrap wrap-anywhere text-foreground"
                   aria-label="你的消息"
                 >
                   {run.prompt}
@@ -192,53 +192,51 @@ export function MessageStream({
               <RunActivity run={run} />
 
               {(replies.length > 0 || run.status === "running") && (
-                <section className="flex min-w-0 items-start gap-3" aria-label={`${run.executor.name} 回复`}>
-                  <EngineAvatar engine={run.executor.engine} size="sm" />
-                  <div className="min-w-0 flex-1 space-y-2.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium text-foreground">{run.executor.name}</span>
-                      {run.executor.model && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                          <Cpu className="size-3" aria-hidden="true" />
-                          {run.executor.model.id}
-                          {run.executor.model.effort ? ` · ${run.executor.model.effort}` : ""}
-                        </span>
-                      )}
-                      {run.finished && (
-                        <span className="text-[11px] text-muted-foreground tabular-nums">
-                          {formatDuration(run.started, run.finished)}
-                        </span>
-                      )}
-                    </div>
-
-                    {replies.map(reply => (
-                      <MarkdownReply key={reply.id} text={reply.text} />
-                    ))}
-
-                    {run.status === "running" && run.id === newestRun?.id && (
-                      <>
-                        {activePreview && <MarkdownReply text={activePreview} />}
-                        <p
-                          role="status"
-                          className="inline-flex items-center gap-2 rounded-full bg-[var(--status-running-soft)] px-3 py-1 text-xs font-medium text-[var(--status-running)]"
-                        >
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                          <span>{activePreview ? "正在生成回复…" : "执行器正在处理中…"}</span>
-                        </p>
-                      </>
+                <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
+                  <div className="conversation-meta flex flex-wrap items-center gap-2">
+                    <EngineIcon engine={run.executor.engine} />
+                    <span>{run.executor.name}</span>
+                    {run.executor.model && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                        <Cpu className="size-3" aria-hidden="true" />
+                        {run.executor.model.id}
+                        {run.executor.model.effort ? ` · ${run.executor.model.effort}` : ""}
+                      </span>
+                    )}
+                    {run.finished && (
+                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                        {formatDuration(run.started, run.finished)}
+                      </span>
                     )}
                   </div>
+
+                  {replies.map(reply => (
+                    <MarkdownReply key={reply.id} text={reply.text} />
+                  ))}
+
+                  {run.status === "running" && run.id === newestRun?.id && (
+                    <>
+                      {activePreview && <MarkdownReply text={activePreview} />}
+                      <p
+                        role="status"
+                        className="conversation-meta inline-flex items-center gap-2"
+                      >
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                        <span>{activePreview ? "正在生成回复…" : "执行器正在处理中…"}</span>
+                      </p>
+                    </>
+                  )}
                 </section>
               )}
 
               {run.status === "succeeded" && !replies.length && (
-                <div className="pl-10">
+                <div>
                   <RunStatusPill status="succeeded" />
                 </div>
               )}
 
               {run.error && (
-                <div className="pl-10">
+                <div>
                   <Alert variant="destructive">
                     <AlertDescription>{run.error}</AlertDescription>
                   </Alert>
@@ -246,7 +244,7 @@ export function MessageStream({
               )}
 
               {!run.error && ["stopped", "interrupted", "failed"].includes(run.status) && (
-                <div className="flex items-center gap-2 pl-10 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <RunStatusPill status={run.status} />
                   <span>{RUN_STATUS_LABELS[run.status]}</span>
                 </div>

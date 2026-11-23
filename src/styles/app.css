@@ -174,67 +174,6 @@
     }
   }
 
-  /* Conversation view */
-  .conversation-topbar {
-    border-bottom: var(--board-hairline) solid var(--board-line);
-    background: color-mix(in srgb, var(--board-canvas) 92%, transparent);
-    backdrop-filter: blur(12px);
-  }
-
-  .conversation-column {
-    width: 100%;
-    max-width: calc(var(--dsh-composer-card-max-width, 800px) + 48px);
-    margin-inline: auto;
-  }
-
-  .conversation-user-bubble {
-    border-radius: 18px 18px 6px 18px;
-    background: var(--dsw-specific-bubble, var(--board-recessed));
-    border: var(--board-hairline) solid var(--board-line-soft);
-    font-size: var(--dsh-content-font-size, 14px);
-    line-height: calc(24px + var(--dsh-content-font-delta, 0px));
-  }
-
-  .conversation-composer-card {
-    --dsw-elevation-stroke-color: var(--board-line-strong);
-    border-radius: var(--dsw-radius-panel, 24px);
-    background: var(--dsw-specific-input-major, var(--board-card));
-    box-shadow: var(--board-shadow-composer);
-    transition: box-shadow 160ms ease;
-  }
-
-  .conversation-composer-card:focus-within {
-    --dsw-elevation-stroke-color: var(--board-brand);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--board-brand) 65%, transparent),
-      0 6px 24px -6px color-mix(in srgb, var(--board-brand) 16%, transparent);
-  }
-
-  .conversation-send-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    background: var(--dsw-alias-button-info-fill, var(--board-brand));
-    color: var(--dsw-alias-label-on-color, #ffffff);
-    transition: transform 100ms ease, background-color 120ms ease, opacity 120ms ease;
-  }
-
-  @media (hover: hover) {
-    .conversation-send-btn:hover:not(:disabled) {
-      background: var(--dsw-alias-button-info-hover, var(--board-brand));
-      transform: scale(1.03);
-    }
-  }
-
-  .conversation-stop-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    background: var(--board-danger);
-    color: #ffffff;
-    transition: transform 100ms ease, opacity 120ms ease;
-  }
-
   /* Markdown typography inside assistant replies */
   .task-markdown {
     font-size: var(--dsh-content-font-size, 14px);
