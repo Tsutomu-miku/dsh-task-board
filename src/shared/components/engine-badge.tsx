@@ -5,7 +5,7 @@ import { cn } from "../lib/utils"
 
 const logos = { dsh: dshLogo, codex: codexLogo }
 
-function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
+export function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
   return (
     <img src={logos[engine]} alt="" width={16} height={16} draggable={false}
       className={cn("size-3.5 shrink-0 object-contain", engine === "dsh" && "rounded-[18%] bg-white", className)}

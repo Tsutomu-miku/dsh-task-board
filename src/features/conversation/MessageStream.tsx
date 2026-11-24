@@ -3,7 +3,7 @@ import Markdown from "react-markdown"
 import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
-import { EngineAvatar } from "../../shared/components/engine-badge"
+import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
 import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskItem, type Transcript } from "../../shared/types/board"
@@ -123,7 +123,7 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
 
       <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
         <div className="conversation-meta flex flex-wrap items-center gap-2">
-          <EngineAvatar engine={run.executor.engine} size="xs" />
+          <EngineIcon engine={run.executor.engine} className="size-5 drop-shadow-sm" />
           <span>{run.executor.name}</span>
           {run.executor.model && (
             <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -144,16 +144,12 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
             {preview && <MarkdownReply text={preview} />}
             <div className="conversation-meta flex min-w-0 items-start gap-2">
               <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              <span className="min-w-0">
-                <span role="status">
-                  {latestCommand && (
-                    <span className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="shrink-0">最近命令</span>
-                      <code className="line-clamp-2 min-w-0 whitespace-pre-wrap wrap-anywhere">{latestCommand}</code>
-                    </span>
-                  )}
-                </span>
-                {!latestCommand && (preview ? "正在生成回复…" : "执行器正在处理中…")}
+              <span className="min-w-0" role="status">
+                {latestCommand ? (
+                  <code className="line-clamp-2 whitespace-pre-wrap wrap-anywhere">{latestCommand}</code>
+                ) : (
+                  preview ? "正在生成回复…" : "执行器正在处理中…"
+                )}
               </span>
             </div>
           </>
