@@ -21,7 +21,7 @@ npm pack
 `npm pack` 会输出安装包的文件名。已有 `.tgz` 安装包时，可直接在文件所在目录执行以下命令，文件名按实际版本替换。
 
 ```zsh
-npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.8.2.tgz
+npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.8.3.tgz
 npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
 ```
 
@@ -82,4 +82,4 @@ npm test
 npm run build
 ```
 
-参见 [架构与设计](docs/design.md) 和 [第三方 UI 许可](SHADCN-LICENSE.md)。
+参见 [架构与设计](docs/design.md)、[第三方 UI 许可](SHADCN-LICENSE.md) 和 [执行器图标来源与许可](docs/executor-icon-notices.md)。
