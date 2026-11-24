@@ -21,7 +21,7 @@ npm pack
 `npm pack` 会输出安装包的文件名。已有 `.tgz` 安装包时，可直接在文件所在目录执行以下命令，文件名按实际版本替换。
 
 ```zsh
-npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.8.0.tgz
+npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.8.1.tgz
 npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
 ```
 
@@ -44,7 +44,7 @@ npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
 | **插队** | 放到等待队列最前，等当前运行结束后优先执行。 |
 | **停止当前并接管** | 在正在运行的卡片上停止当前轮，保存结果后启动下一轮。 |
 
-初始默认值是 **排队**。发送菜单可以设置整个 Web profile 的默认方式，也可只覆盖当前消息。待执行消息会在重启后保留，可在卡片底部取消。
+初始默认值是 **排队**，可在 DSH 的 **设置 → 通用 → 任务看板默认发送方式** 修改。有任务运行时，发送按钮旁的菜单可为当前消息选择其他方式。待执行消息会在重启后保留，可在卡片底部取消。
 
 ## 让其他 Agent 读取看板
 
