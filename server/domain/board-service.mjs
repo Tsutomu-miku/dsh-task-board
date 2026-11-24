@@ -5,6 +5,7 @@ import { openDatabase } from "../storage/database.mjs"
 import { createEventRepository } from "../storage/event-repository.mjs"
 import { createExecutorRepository } from "../storage/executor-repository.mjs"
 import { createReplyRepository } from "../storage/reply-repository.mjs"
+import { createBoardContext } from "./board-context.mjs"
 import { createCardManager } from "./cards.mjs"
 import { createExecutorManager, EXECUTOR_ACTIONS } from "./executors.mjs"
 import { createRunManager } from "./runs.mjs"
@@ -27,6 +28,7 @@ export function openBoard({
   try {
     const events = createEventRepository(storage.db)
     const replies = createReplyRepository(storage.db)
+    const context = createBoardContext(storage.db, replies)
     const executors = createExecutorManager({
       store: createExecutorRepository(storage.db),
       codexSandbox,
@@ -80,10 +82,20 @@ export function openBoard({
         return events.list(runId, after)
       },
 
-      conversation(cardId) {
+      activity(runId, page) {
+        assertOpen()
+        return events.activity(runId, page)
+      },
+
+      context(name, args) {
+        assertOpen()
+        return context.call(name, args)
+      },
+
+      conversation(cardId, after) {
         assertOpen()
         cards.get(cardId)
-        return { replies: replies.list(cardId), preview: runs.preview(cardId) }
+        return { replies: replies.list(cardId, after), preview: runs.preview(cardId) }
       },
 
       act(input) {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-task-board",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "build": "tailwindcss -i src/styles/tokens.css -o dist/styles.css --minify && node build-client.mjs",
@@ -30,6 +30,9 @@
     "node": ">=22.13.0"
   },
   "main": "./index.mjs",
+  "bin": {
+    "dsh-task-board-mcp": "./server/mcp/main.mjs"
+  },
   "exports": {
     ".": "./index.mjs",
     "./client": "./dist/client.js",
@@ -58,5 +61,8 @@
     "docs/design.md",
     "SHADCN-LICENSE.md",
     "docs/markdown-license.txt"
-  ]
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  }
 }

@@ -29,6 +29,7 @@ const SCHEMA_SQL = `
     message TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS run_events_by_run ON run_events (run_id, seq);
+  CREATE INDEX IF NOT EXISTS run_commands_by_run ON run_events (run_id, seq) WHERE kind = 'command';
 
   CREATE TABLE IF NOT EXISTS assistant_replies (
     id INTEGER PRIMARY KEY,
