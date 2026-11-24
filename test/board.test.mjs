@@ -111,5 +111,9 @@ test("Codex arguments only resume the stored session", () => {
   assert.deepEqual(codexArgs(session, "read-only"), [
     "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "resume", "--json", session, "-",
   ])
+  assert.deepEqual(codexArgs(session, "danger-full-access"), [
+    "exec", "--json", "--sandbox", "danger-full-access", "--skip-git-repo-check",
+    "-c", 'approval_policy="never"', "resume", "--json", session, "-",
+  ])
   assert.throws(() => codexArgs("--last", "read-only"), /无效/)
 })

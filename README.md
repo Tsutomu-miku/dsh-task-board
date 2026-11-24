@@ -14,7 +14,7 @@
 已验证 DSH `0.2.2-rc.5`、Node.js 22 与 WSL/Linux。
 
 ```sh
-dsh plugin --profile web add ./dsh-task-board-0.6.4.tgz
+dsh plugin --profile web add ./dsh-task-board-0.6.5.tgz
 dsh web
 ```
 

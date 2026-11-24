@@ -24,7 +24,13 @@ export const RUN_STATUS_LABELS = {
 
 export type RunStatus = keyof typeof RUN_STATUS_LABELS
 
-export type SandboxMode = "read-only" | "workspace-write"
+export const SANDBOX_LABELS = {
+  "read-only": "只读",
+  "workspace-write": "可写工作区",
+  "danger-full-access": "完全访问（Full Access）",
+} as const
+
+export type SandboxMode = keyof typeof SANDBOX_LABELS
 
 export interface ModelSelection {
   id: string
@@ -61,6 +67,7 @@ export interface RunRecord {
   prompt: string
   started: number
   finished?: number
+  usage?: { tokens: number; scope: "run" | "session" }
   status: RunStatus
   output: string
   error: string | null
@@ -71,7 +78,7 @@ export interface RunRecord {
 export interface RunEvent {
   seq: number
   at: number
-  kind: "status" | "tool" | "tool_result" | "output" | "error"
+  kind: "status" | "command" | "tool" | "tool_result" | "output" | "error"
   message: string
 }
 

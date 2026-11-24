@@ -91,21 +91,34 @@ export function createRunManager({ cards, executors, events, replies, storage, r
         ...options,
         requestId: attempt.id,
         signal: job.controller.signal,
-        onEvent(kind, message) {
+        onEvent(kind, message, at) {
           if (activeJob !== job) return
           try {
             if (kind === "output" && String(message ?? "").trim()) {
               storage.atomic(() => {
                 replies.add(card.id, attempt.id, message)
-                events.add(attempt.id, kind, message)
+                events.add(attempt.id, kind, message, at)
               })
               job.preview = ""
             } else {
-              events.add(attempt.id, kind, message)
+              events.add(attempt.id, kind, message, at)
             }
           } catch (error) {
             job.controller.abort("persistence")
             console.error("dsh-task-board: event write failed", error.code ?? error.name)
+          }
+        },
+        onUsage(tokens, scope = "run") {
+          if (activeJob !== job || !Number.isSafeInteger(tokens) || tokens < 0) return
+          attempt.usage = {
+            tokens: scope === "session" ? tokens : (attempt.usage?.tokens ?? 0) + tokens,
+            scope,
+          }
+          try {
+            cards.save(card)
+          } catch (error) {
+            job.controller.abort("persistence")
+            console.error("dsh-task-board: token usage write failed", error.code ?? error.name)
           }
         },
         onPreview(text) {

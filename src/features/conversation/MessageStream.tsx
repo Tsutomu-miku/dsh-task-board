@@ -4,9 +4,11 @@ import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } f
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
-import { formatDuration, formatShortPath } from "../../shared/lib/format"
-import { RUN_STATUS_LABELS, type Executor, type TaskItem, type Transcript } from "../../shared/types/board"
+import { formatShortPath } from "../../shared/lib/format"
+import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskItem, type Transcript } from "../../shared/types/board"
 import { RunActivity } from "./RunActivity"
+import { RunMetrics } from "./RunMetrics"
+import { useRunEvents } from "./useRunEvents"
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false)
@@ -70,6 +72,105 @@ function MarkdownReply({ text }: { text: string }) {
         {text}
       </Markdown>
     </div>
+  )
+}
+
+function RunMessage({ run, replies, preview, startedFreshSession }: {
+  run: RunRecord
+  replies: { id: number; text: string }[]
+  preview: string
+  startedFreshSession: boolean
+}) {
+  const activity = useRunEvents(run)
+  const { latestCommand } = activity
+
+  return (
+    <article className="grid gap-4">
+      {startedFreshSession && (
+        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--board-line)] bg-[var(--board-lane)] px-2.5 py-0.5 text-[11px]">
+            <GitBranch className="size-3" aria-hidden="true" />
+            已另起新会话
+          </span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      )}
+
+      <div className="flex flex-col items-end gap-1">
+        <div
+          className="conversation-user-bubble whitespace-pre-wrap wrap-anywhere text-foreground"
+          aria-label="你的消息"
+        >
+          {run.prompt}
+        </div>
+        <time className="px-1 text-[11px] text-muted-foreground/80">
+          {new Date(run.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </time>
+      </div>
+
+      <RunActivity run={run} {...activity} />
+
+      <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
+        <div className="conversation-meta flex flex-wrap items-center gap-2">
+          <EngineIcon engine={run.executor.engine} />
+          <span>{run.executor.name}</span>
+          {run.executor.model && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              <Cpu className="size-3" aria-hidden="true" />
+              {run.executor.model.id}
+              {run.executor.model.effort ? ` · ${run.executor.model.effort}` : ""}
+            </span>
+          )}
+          <RunMetrics run={run} />
+        </div>
+
+        {replies.map(reply => (
+          <MarkdownReply key={reply.id} text={reply.text} />
+        ))}
+
+        {run.status === "running" && (
+          <>
+            {preview && <MarkdownReply text={preview} />}
+            <div className="conversation-meta flex min-w-0 items-start gap-2">
+              <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              <span className="min-w-0">
+                <span role="status">
+                  {latestCommand && (
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="shrink-0">最近命令</span>
+                      <code className="line-clamp-2 min-w-0 whitespace-pre-wrap wrap-anywhere">{latestCommand}</code>
+                    </span>
+                  )}
+                </span>
+                {!latestCommand && (preview ? "正在生成回复…" : "执行器正在处理中…")}
+              </span>
+            </div>
+          </>
+        )}
+      </section>
+
+      {run.status === "succeeded" && !replies.length && (
+        <div>
+          <RunStatusPill status="succeeded" />
+        </div>
+      )}
+
+      {run.error && (
+        <div>
+          <Alert variant="destructive">
+            <AlertDescription>{run.error}</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {!run.error && ["stopped", "interrupted", "failed"].includes(run.status) && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <RunStatusPill status={run.status} />
+          <span>{RUN_STATUS_LABELS[run.status]}</span>
+        </div>
+      )}
+    </article>
   )
 }
 
@@ -165,91 +266,13 @@ export function MessageStream({
           if (run.session) previousSession = run.session
 
           return (
-            <article key={run.id} className="grid gap-4">
-              {startedFreshSession && (
-                <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--board-line)] bg-[var(--board-lane)] px-2.5 py-0.5 text-[11px]">
-                    <GitBranch className="size-3" aria-hidden="true" />
-                    已另起新会话
-                  </span>
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-              )}
-
-              <div className="flex flex-col items-end gap-1">
-                <div
-                  className="conversation-user-bubble whitespace-pre-wrap wrap-anywhere text-foreground"
-                  aria-label="你的消息"
-                >
-                  {run.prompt}
-                </div>
-                <time className="px-1 text-[11px] text-muted-foreground/80">
-                  {new Date(run.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </time>
-              </div>
-
-              <RunActivity run={run} />
-
-              {(replies.length > 0 || run.status === "running") && (
-                <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
-                  <div className="conversation-meta flex flex-wrap items-center gap-2">
-                    <EngineIcon engine={run.executor.engine} />
-                    <span>{run.executor.name}</span>
-                    {run.executor.model && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                        <Cpu className="size-3" aria-hidden="true" />
-                        {run.executor.model.id}
-                        {run.executor.model.effort ? ` · ${run.executor.model.effort}` : ""}
-                      </span>
-                    )}
-                    {run.finished && (
-                      <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {formatDuration(run.started, run.finished)}
-                      </span>
-                    )}
-                  </div>
-
-                  {replies.map(reply => (
-                    <MarkdownReply key={reply.id} text={reply.text} />
-                  ))}
-
-                  {run.status === "running" && run.id === newestRun?.id && (
-                    <>
-                      {activePreview && <MarkdownReply text={activePreview} />}
-                      <p
-                        role="status"
-                        className="conversation-meta inline-flex items-center gap-2"
-                      >
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                        <span>{activePreview ? "正在生成回复…" : "执行器正在处理中…"}</span>
-                      </p>
-                    </>
-                  )}
-                </section>
-              )}
-
-              {run.status === "succeeded" && !replies.length && (
-                <div>
-                  <RunStatusPill status="succeeded" />
-                </div>
-              )}
-
-              {run.error && (
-                <div>
-                  <Alert variant="destructive">
-                    <AlertDescription>{run.error}</AlertDescription>
-                  </Alert>
-                </div>
-              )}
-
-              {!run.error && ["stopped", "interrupted", "failed"].includes(run.status) && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <RunStatusPill status={run.status} />
-                  <span>{RUN_STATUS_LABELS[run.status]}</span>
-                </div>
-              )}
-            </article>
+            <RunMessage
+              key={run.id}
+              run={run}
+              replies={replies}
+              preview={run.id === newestRun?.id ? activePreview : ""}
+              startedFreshSession={startedFreshSession}
+            />
           )
         })}
       </div>

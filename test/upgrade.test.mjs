@@ -89,12 +89,12 @@ test("named executors persist settings and run snapshots, including events and r
     await board.act({ action: "toggle-executor", id: executor.id, enabled: false })
     assert.notEqual(board.read().defaultExecutor, executor.id)
     assert.throws(() => board.act({ action: "run", id: card.id, from: "review", prompt: "Run" }), /已停用/)
-    await board.act({ action: "save-executor", id: executor.id, engine: "codex", name: "Renamed", workdir: alternate, sandbox: "read-only" })
+    await board.act({ action: "save-executor", id: executor.id, engine: "codex", name: "Renamed", workdir: alternate, sandbox: "danger-full-access" })
     await board.act({ action: "toggle-executor", id: executor.id, enabled: true })
     board.act({ action: "run", id: card.id, from: "review", prompt: "Resume", resume: true })
     try {
       assert.equal(calls[1].options.workdir, dir)
-      assert.equal(calls[1].options.executor.sandbox, "read-only")
+      assert.equal(calls[1].options.executor.sandbox, "danger-full-access")
       assert.equal(calls[1].options.session, "old-session")
       assert.throws(() => board.act({ action: "stop", id: card.id, runId: first.id }), /已结束/)
     } finally { calls[1].resolve({ status: "succeeded" }) }
