@@ -2,8 +2,9 @@ const copy = {
   zh: {
     agent: "本轮执行器", followDefault: "任务默认",
     queue: "排队", priority: "插队", takeover: "停止当前并接管",
-    sendMode: "发送方式", thisSend: "本次发送", defaultMode: "默认发送",
-    defaultLabel: "跟随默认", queued: "等待发送", queueFailed: "派发失败",
+    sendMode: "发送方式", thisSend: "本次发送", defaultMode: "任务看板默认发送方式",
+    defaultModeHint: "已有任务运行时，新消息按此方式等待执行。", savingMode: "正在保存…",
+    queued: "等待发送", queueFailed: "派发失败",
     cancel: "取消", dismiss: "关闭", send: "发送", start: "开始会话",
     stop: "停止运行", stopping: "正在停止…",
     message: "消息", placeholder: "输入消息，或输入 @ 选择执行器",
@@ -15,8 +16,9 @@ const copy = {
   en: {
     agent: "Executor for this message", followDefault: "Task default",
     queue: "Queue", priority: "Send next", takeover: "Stop current run and take over",
-    sendMode: "Send mode", thisSend: "This message", defaultMode: "Default send mode",
-    defaultLabel: "Use default", queued: "Queued messages", queueFailed: "Could not start",
+    sendMode: "Send mode", thisSend: "This message", defaultMode: "Task Board default send mode",
+    defaultModeHint: "Applies when a task is already running.", savingMode: "Saving…",
+    queued: "Queued messages", queueFailed: "Could not start",
     cancel: "Cancel", dismiss: "Dismiss", send: "Send", start: "Start session",
     stop: "Stop run", stopping: "Stopping…",
     message: "Message", placeholder: "Enter a message, or type @ to choose an executor",

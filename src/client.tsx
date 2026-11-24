@@ -1,4 +1,5 @@
 import { Kanban } from "lucide-react"
+import { SendModePreference } from "./features/conversation/SendModePreference"
 import { AppShell } from "./features/layout/AppShell"
 import { endpoint } from "./shared/api/client"
 
@@ -36,5 +37,9 @@ export function apply(ctx: Context) {
       { name: "sidebar.panellist", id: "task-board", order: 30, label: "任务看板" },
       ({ size }: { size: number }) => <Kanban size={size} strokeWidth={1.8} aria-hidden="true" />
     )
+  )
+
+  ctx.slots.inject("settings.general.item", () =>
+    ctx.slots.register({ name: "settings.general.item", id: "dsh-task-board-send-mode", order: 80 }, SendModePreference)
   )
 }

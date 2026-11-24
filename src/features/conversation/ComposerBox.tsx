@@ -21,7 +21,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const waiting = queue.filter(item => item.cardId === task.id)
   const [draft, setDraft] = useState(() => task.runs.length || waiting.length ? "" : task.prompt)
   const [target, setTarget] = useState<string | null>(null)
-  const [selectedMode, setSelectedMode] = useState<{ mode: SendMode; runId?: string } | null>(null)
+  const [selectedMode, setSelectedMode] = useState<{ mode: SendMode; runId: string } | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [stoppingRun, setStoppingRun] = useState<string>()
@@ -34,14 +34,16 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
 
   const enabled = executors.filter(item => item.enabled)
   const executor = executors.find(item => item.id === (target ?? task.executorId))
-  const activeRunId = running?.id === task.id ? running.runs[0]?.id : undefined
+  const runningId = running?.runs[0]?.id
+  const activeRunId = running?.id === task.id ? runningId : undefined
   const stopping = Boolean(activeRunId && stoppingRun === activeRunId)
   const workdir = executor?.workdir ?? task.workdir
   const previous = task.runs.find(run =>
     run.session && run.status === "succeeded" && run.executor.id === executor?.id &&
     run.executor.workdir === workdir && run.executor.preset === executor?.preset)
   const { environment, checking } = useEnvironment(workdir, showModel)
-  const mode = selectedMode?.mode ?? preference
+  const override = selectedMode?.runId === runningId ? selectedMode : null
+  const mode = override?.mode ?? preference
   const mention = target === null ? /^@([^\r\n]*)$/.exec(draft)?.[1]?.toLowerCase() : undefined
   const candidates = mention === undefined ? [] : enabled.filter(item => item.name.toLowerCase().startsWith(mention))
 
@@ -90,8 +92,8 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
         id: task.id,
         executorId: executor.id,
         prompt: submitted,
-        ...(selectedMode ? { mode: selectedMode.mode } : {}),
-        ...(mode === "takeover" ? { runId: selectedMode?.runId } : {}),
+        ...(override ? { mode: override.mode } : {}),
+        ...(override?.mode === "takeover" ? { runId: override.runId } : {}),
         ...(freshSession ? { freshSession } : {}),
         ...(model ? { model } : {}),
       })
@@ -121,15 +123,6 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
     setError("")
     try {
       await save({ action: "cancel-queued", id: task.id, messageId })
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
-
-  async function changePreference(next: DefaultSendMode) {
-    setError("")
-    try {
-      await save({ action: "set-default-send-mode", mode: next })
     } catch (err) {
       setError((err as Error).message)
     }
@@ -243,10 +236,11 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
             </Button>
 
             <div className="ml-auto flex items-center gap-2">
-              <SendModeMenu selected={selectedMode?.mode ?? null} preference={preference} allowTakeover={Boolean(activeRunId)} disabled={busy}
-                onSelect={next => setSelectedMode(next ? { mode: next, ...(next === "takeover" ? { runId: activeRunId } : {}) } : null)}
-                onPreference={next => void changePreference(next)}
-              />
+              {runningId && (
+                <SendModeMenu mode={mode} allowTakeover={Boolean(activeRunId)} disabled={busy}
+                  onSelect={next => setSelectedMode(next === preference ? null : { mode: next, runId: runningId })}
+                />
+              )}
               {activeRunId && (
                 <button type="button" aria-label={stopping ? copy.stopping : copy.stop}
                   title={copy.stop} disabled={stopping} onClick={() => void handleStop(activeRunId)}
