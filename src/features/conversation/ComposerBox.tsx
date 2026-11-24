@@ -1,60 +1,103 @@
-import { type FormEvent, useEffect, useState } from "react"
-import { ArrowUp, Cpu, RotateCcw, Square } from "lucide-react"
+import { type FormEvent, useId, useRef, useState } from "react"
+import { ArrowUp, AtSign, Cpu, RotateCcw, Square } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
 import { Textarea } from "../../shared/components/ui/textarea"
 import { ModelPicker } from "../../shared/components/model-picker"
 import { useEnvironment } from "../../shared/hooks/use-environment"
-import type { BoardSaveFn, Executor, ModelSelection, TaskItem } from "../../shared/types/board"
+import { ENGINES, type BoardSaveFn, type DefaultSendMode, type Executor, type ModelSelection, type QueuedMessage, type SendMode, type TaskItem } from "../../shared/types/board"
+import { composerCopy } from "./composer-copy"
+import { SendModeMenu } from "./SendModeMenu"
 
-export function ComposerBox({
-  task,
-  executor,
-  running,
-  save,
-}: {
+export function ComposerBox({ task, executors, running, queue, preference, save }: {
   task: TaskItem
-  executor?: Executor
+  executors: Executor[]
   running?: TaskItem
+  queue: QueuedMessage[]
+  preference: DefaultSendMode
   save: BoardSaveFn
 }) {
-  const [draft, setDraft] = useState(task.runs.length ? "" : task.prompt)
+  const waiting = queue.filter(item => item.cardId === task.id)
+  const [draft, setDraft] = useState(() => task.runs.length || waiting.length ? "" : task.prompt)
+  const [target, setTarget] = useState<string | null>(null)
+  const [selectedMode, setSelectedMode] = useState<{ mode: SendMode; runId?: string } | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
-  const [stopping, setStopping] = useState(false)
+  const [stoppingRun, setStoppingRun] = useState<string>()
   const [showModel, setShowModel] = useState(false)
   const [freshSession, setFreshSession] = useState(false)
   const [model, setModel] = useState<ModelSelection | null>(null)
+  const composerId = useId()
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const copy = composerCopy()
 
-  const active = task.status === "running"
-  const resume = Boolean(task.session && !freshSession)
-  const previous = resume ? task.runs.find(run => run.session === task.session) : undefined
-  const workdir = previous?.executor.workdir ?? executor?.workdir ?? task.workdir
-  const { environment, checking } = useEnvironment(workdir, showModel && !active)
-  const canSend = !running && Boolean(executor?.enabled) && Boolean(draft.trim()) && !busy
+  const enabled = executors.filter(item => item.enabled)
+  const executor = executors.find(item => item.id === (target ?? task.executorId))
+  const activeRunId = running?.id === task.id ? running.runs[0]?.id : undefined
+  const stopping = Boolean(activeRunId && stoppingRun === activeRunId)
+  const workdir = executor?.workdir ?? task.workdir
+  const previous = task.runs.find(run =>
+    run.session && run.status === "succeeded" && run.executor.id === executor?.id &&
+    run.executor.workdir === workdir && run.executor.preset === executor?.preset)
+  const { environment, checking } = useEnvironment(workdir, showModel)
+  const mode = selectedMode?.mode ?? preference
+  const mention = target === null ? /^@([^\r\n]*)$/.exec(draft)?.[1]?.toLowerCase() : undefined
+  const candidates = mention === undefined ? [] : enabled.filter(item => item.name.toLowerCase().startsWith(mention))
 
-  useEffect(() => {
-    if (!active) setStopping(false)
-  }, [active])
+  function selectExecutor(id: string | null) {
+    setTarget(id)
+    setModel(null)
+    setFreshSession(false)
+  }
+
+  function changeDraft(value: string) {
+    if (target === null && value.startsWith("@")) {
+      const entered = value.slice(1).toLowerCase()
+      const matches = enabled.filter(item =>
+        entered.startsWith(item.name.toLowerCase()) && /^\s/.test(value.slice(item.name.length + 1)))
+      const best = matches.reduce<Executor | null>((longest, item) =>
+        !longest || item.name.length > longest.name.length ? item : longest, null)
+      if (best && matches.filter(item => item.name.length === best.name.length).length === 1 &&
+        (value.endsWith("\n") || !enabled.some(item => item.name.toLowerCase().startsWith(entered)))) {
+        selectExecutor(best.id)
+        setDraft(value.slice(best.name.length + 1).trimStart())
+        return
+      }
+    }
+    setDraft(value)
+  }
+
+  function pickMention(id: string) {
+    selectExecutor(id)
+    setDraft("")
+    textarea.current?.focus()
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!canSend) return
+    if (busy || !draft.trim() || !executor?.enabled) return
+    if (candidates.length) {
+      pickMention(candidates[0].id)
+      return
+    }
     const submitted = draft
     setBusy(true)
     setError("")
     try {
       await save({
-        action: "run",
+        action: "send",
         id: task.id,
-        from: task.status,
+        executorId: executor.id,
         prompt: submitted,
-        resume,
+        ...(selectedMode ? { mode: selectedMode.mode } : {}),
+        ...(mode === "takeover" ? { runId: selectedMode?.runId } : {}),
+        ...(freshSession ? { freshSession } : {}),
         ...(model ? { model } : {}),
       })
-      setDraft(current => (current === submitted ? "" : current))
-      setFreshSession(false)
-      setModel(null)
+      setDraft(current => current === submitted ? "" : current)
+      selectExecutor(null)
+      setSelectedMode(null)
       setShowModel(false)
     } catch (err) {
       setError((err as Error).message)
@@ -63,51 +106,105 @@ export function ComposerBox({
     }
   }
 
-  async function handleStop() {
-    setStopping(true)
+  async function handleStop(runId: string) {
+    setStoppingRun(runId)
     setError("")
     try {
-      await save({ action: "stop", id: task.id, runId: task.runs[0]?.id })
+      await save({ action: "stop", id: task.id, runId })
     } catch (err) {
       setError((err as Error).message)
-      setStopping(false)
+      setStoppingRun(undefined)
     }
   }
 
+  async function cancel(messageId: string) {
+    setError("")
+    try {
+      await save({ action: "cancel-queued", id: task.id, messageId })
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  async function changePreference(next: DefaultSendMode) {
+    setError("")
+    try {
+      await save({ action: "set-default-send-mode", mode: next })
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  const sendLabel = running ? copy[mode] : task.runs.length ? copy.send : copy.start
+
   return (
     <div className="shrink-0">
-      <form onSubmit={handleSubmit} className="conversation-column conversation-dock grid gap-2 pt-2 pb-4 md:pb-5">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+      <form onSubmit={handleSubmit} aria-label={copy.message} className="conversation-column conversation-dock grid gap-2 pt-2 pb-4 md:pb-5">
+        {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
+
+        {waiting.length > 0 && (
+          <section aria-label={copy.queued} className="grid gap-1 rounded-xl border border-[var(--board-line-soft)] px-3 py-2">
+            <span role="status" className="text-xs font-medium text-muted-foreground">{copy.queued} · {waiting.filter(item => !item.error).length}</span>
+            <ol className="m-0 grid max-h-28 list-none gap-0.5 overflow-y-auto p-0">
+              {waiting.map(item => (
+                <li key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
+                  <span className="shrink-0 text-muted-foreground">@{item.executorName}</span>
+                  <span title={item.prompt} className="min-w-0 flex-1 truncate">{item.prompt}</span>
+                  <span title={item.error ?? undefined} className="text-muted-foreground">
+                    {item.error ? copy.queueFailed : copy[item.mode]}
+                  </span>
+                  <Button type="button" size="xs" variant="ghost" aria-label={`${item.error ? copy.dismiss : copy.cancel} · ${item.prompt}`} onClick={() => void cancel(item.id)}>
+                    {item.error ? copy.dismiss : copy.cancel}
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          </section>
         )}
 
         <div className="conversation-composer-card grid min-w-0 gap-3 px-2.5 pt-2.5 pb-2">
           <Textarea
+            ref={textarea}
+            name="message"
             value={draft}
-            aria-label="发送消息"
-            placeholder={resume ? "继续追问当前会话，Enter 发送，Shift+Enter 换行…" : "输入要交给执行器的任务说明…"}
+            required
+            readOnly={busy}
+            aria-label={copy.message}
+            placeholder={copy.placeholder}
             className="conversation-input max-h-48 min-h-[44px] resize-none border-0 bg-transparent px-1 py-0.5 shadow-none focus-visible:ring-0"
             maxLength={16000}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return
-              e.preventDefault()
-              e.stopPropagation()
-              if (canSend) e.currentTarget.form?.requestSubmit()
+            onChange={event => changeDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return
+              event.preventDefault()
+              event.stopPropagation()
+              if (candidates.length) {
+                pickMention(candidates[0].id)
+              } else {
+                event.currentTarget.form?.requestSubmit()
+              }
             }}
           />
 
-          {showModel && !active && (
+          {candidates.length > 0 && (
+            <div aria-label={copy.chooseAgent} role="group" className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
+              {candidates.map((item, index) => (
+                <Button key={item.id} type="button" size="xs" variant={index === 0 ? "secondary" : "outline"} onClick={() => pickMention(item.id)}>
+                  @{item.name} <span className="text-muted-foreground">{ENGINES[item.engine]}</span>
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {showModel && executor && (
             <div className="rounded-xl border border-[var(--board-line-soft)] bg-[var(--board-lane)] p-3">
               <ModelPicker
-                id="conversation-model"
+                id={`${composerId}-model`}
                 compact
-                models={environment?.models[task.engine] ?? []}
+                models={environment?.models[executor.engine] ?? []}
                 value={model}
                 onChange={setModel}
-                defaultLabel={resume ? "沿用上次运行" : "跟随执行器默认"}
+                defaultLabel={previous && !freshSession ? copy.usePreviousModel : copy.executorModel}
                 checking={checking}
                 disabled={busy}
               />
@@ -115,76 +212,62 @@ export function ComposerBox({
           )}
 
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            {!active && (
-              <>
-                {task.session && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant={freshSession ? "secondary" : "ghost"}
-                    aria-pressed={freshSession}
-                    onClick={() => setFreshSession(v => !v)}
-                    className={freshSession ? "text-[var(--board-brand)]" : "text-muted-foreground"}
-                  >
-                    <RotateCcw className="size-3.5" aria-hidden="true" />
-                    {freshSession ? "即将另起新会话" : "另起会话"}
-                  </Button>
-                )}
+            <Select value={target ?? "default"} onValueChange={value => selectExecutor(value === "default" ? null : value)} disabled={busy}>
+              <SelectTrigger size="sm" aria-label={copy.agent} className="gap-1">
+                <AtSign className="size-3.5" aria-hidden="true" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="top">
+                <SelectItem value="default">{copy.followDefault}{target === null && executor ? ` · ${executor.name}` : ""}</SelectItem>
+                {executors.map(item => (
+                  <SelectItem key={item.id} value={item.id} disabled={!item.enabled}>
+                    {item.name} · {ENGINES[item.engine]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                <Button
-                  type="button"
-                  size="xs"
-                  variant={showModel || model ? "secondary" : "ghost"}
-                  aria-expanded={showModel}
-                  onClick={() => setShowModel(v => !v)}
-                  className="ml-auto max-w-[220px] text-muted-foreground"
-                >
-                  <Cpu className="size-3.5" aria-hidden="true" />
-                  <span className="truncate">
-                    {model ? `${model.id}${model.effort ? ` · ${model.effort}` : ""}` : "切换模型"}
-                  </span>
-                </Button>
-              </>
+            {previous && (
+              <Button type="button" size="xs" variant={freshSession ? "secondary" : "ghost"} aria-pressed={freshSession} onClick={() => setFreshSession(value => !value)}>
+                <RotateCcw className="size-3.5" aria-hidden="true" />
+                {freshSession ? copy.newSession : copy.resetSession}
+              </Button>
             )}
 
-            <div className={`flex items-center gap-2.5 ${active ? "ml-auto" : ""}`}>
-              {!active && (
-                <span className="hidden text-[11px] text-muted-foreground/75 sm:inline">
-                  Enter 发送 · Shift+Enter 换行
-                </span>
-              )}
+            <Button type="button" size="xs" variant={showModel || model ? "secondary" : "ghost"} aria-expanded={showModel}
+              onClick={() => setShowModel(value => !value)} disabled={!executor?.enabled}
+              className="max-w-[220px] text-muted-foreground"
+            >
+              <Cpu className="size-3.5" aria-hidden="true" />
+              <span className="truncate">{model ? `${model.id}${model.effort ? ` · ${model.effort}` : ""}` : copy.model}</span>
+            </Button>
 
-              {active ? (
-                <button
-                  type="button"
-                  aria-label={stopping ? "正在停止…" : "停止运行"}
-                  title="停止运行"
-                  disabled={stopping}
-                  onClick={() => void handleStop()}
+            <div className="ml-auto flex items-center gap-2">
+              <SendModeMenu selected={selectedMode?.mode ?? null} preference={preference} allowTakeover={Boolean(activeRunId)} disabled={busy}
+                onSelect={next => setSelectedMode(next ? { mode: next, ...(next === "takeover" ? { runId: activeRunId } : {}) } : null)}
+                onPreference={next => void changePreference(next)}
+              />
+              {activeRunId && (
+                <button type="button" aria-label={stopping ? copy.stopping : copy.stop}
+                  title={copy.stop} disabled={stopping} onClick={() => void handleStop(activeRunId)}
                   className="conversation-stop-btn inline-flex items-center justify-center disabled:opacity-50"
                 >
                   <Square className="size-3.5 fill-current" aria-hidden="true" />
                 </button>
-              ) : (
-                <button
-                  type="submit"
-                  aria-label={resume ? "发送" : "开始会话"}
-                  title={resume ? "发送消息" : "开始任务会话"}
-                  disabled={!canSend}
-                  className="conversation-send-btn inline-flex items-center justify-center disabled:opacity-35"
-                >
-                  <ArrowUp className="size-[18px]" strokeWidth={2.2} aria-hidden="true" />
-                </button>
               )}
+              <button type="submit" aria-label={sendLabel} title={sendLabel}
+                disabled={busy || !executor?.enabled}
+                className="conversation-send-btn inline-flex items-center justify-center disabled:opacity-35"
+              >
+                <ArrowUp className="size-[18px]" strokeWidth={2.2} aria-hidden="true" />
+              </button>
             </div>
           </div>
         </div>
 
-        {!executor?.enabled && !active && (
-          <p className="px-1 text-xs text-muted-foreground">当前执行器已停用，请先在执行器页面启用。</p>
-        )}
-        {running && !active && (
-          <p className="px-1 text-xs text-muted-foreground">当前正在运行「{running.title}」，完成后可发送新任务。</p>
+        {!executor?.enabled && <p className="px-1 text-xs text-muted-foreground">{copy.disabled}</p>}
+        {running && running.id !== task.id && (
+          <p className="px-1 text-xs text-muted-foreground">{copy.activeTask} · {running.title}</p>
         )}
       </form>
     </div>

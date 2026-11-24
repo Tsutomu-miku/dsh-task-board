@@ -14,7 +14,7 @@
 本版本已在 DSH `0.2.2-rc.5` 与 Node.js 24 上验证。插件需要 Node.js 22.13 或更新版本，运行环境还需满足所用 DSH 版本的 Node.js 要求。
 
 ```sh
-dsh plugin --profile web add ./dsh-task-board-0.7.0.tgz
+dsh plugin --profile web add ./dsh-task-board-0.8.0.tgz
 dsh web
 ```
 
@@ -22,7 +22,11 @@ dsh web
 
 ## Agent context
 
-DSH agents and Codex runs started from the board can use `board_list_tasks` and `board_read_context` to look up tasks by workspace, then read the task and page through its committed replies. Several agents can read the same board concurrently.
+Type `@` in the composer to choose the executor for one message. The selected executor receives the new request and bounded context from earlier runs on the card. Returning to an executor resumes its last successful session when the workspace and preset still match, with context for the intervening runs. Choose a fresh session to start with the new request alone.
+
+Use the send-mode menu to send once or change the default for the DSH Web profile. **Queue** sends pending messages in order. **Send next** moves a message to the front and leaves the active run running. **Stop current run and take over** is available on the active card, and dispatches after that run has stopped and its outcome is saved. Pending messages persist across plugin restarts and can be canceled from the composer.
+
+DSH agents and Codex runs started from the board can use `board_list_tasks`, `board_read_context`, and `board_read_turns` to find cards and page through their prior requests, outcomes and committed replies. Several agents can read the same board concurrently.
 
 Other local MCP clients can launch the package's `dsh-task-board-mcp` executable over stdio. For example, with the standard DSH Web profile, register it in a standalone Codex CLI:
 

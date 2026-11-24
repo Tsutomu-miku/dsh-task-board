@@ -21,6 +21,12 @@ const SCHEMA_SQL = `
   );
   INSERT OR IGNORE INTO board_settings VALUES (1, 'local-dsh');
 
+  CREATE TABLE IF NOT EXISTS board_dispatch_settings (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    default_send_mode TEXT NOT NULL DEFAULT 'queue' CHECK (default_send_mode IN ('queue', 'priority'))
+  );
+  INSERT OR IGNORE INTO board_dispatch_settings (singleton) VALUES (1);
+
   CREATE TABLE IF NOT EXISTS run_events (
     seq INTEGER PRIMARY KEY,
     run_id TEXT NOT NULL,
@@ -38,6 +44,17 @@ const SCHEMA_SQL = `
     text TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS assistant_replies_by_card ON assistant_replies (card_id, id);
+  CREATE INDEX IF NOT EXISTS assistant_replies_by_run ON assistant_replies (run_id, id);
+
+  CREATE TABLE IF NOT EXISTS queued_messages (
+    position INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
+    card_id TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    error TEXT
+  );
+  CREATE INDEX IF NOT EXISTS queued_messages_by_card ON queued_messages (card_id);
 `
 
 export function openDatabase(filename) {

@@ -2,6 +2,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
+import { Button } from "../../shared/components/ui/button"
 import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
@@ -9,6 +10,7 @@ import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskItem, type T
 import { RunActivity } from "./RunActivity"
 import { RunMetrics } from "./RunMetrics"
 import { useRunEvents } from "./useRunEvents"
+import { composerCopy } from "./composer-copy"
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false)
@@ -85,7 +87,7 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
   const { latestCommand } = activity
 
   return (
-    <article className="grid gap-4">
+    <article id={`board-run-${run.id}`} className="grid gap-4">
       {startedFreshSession && (
         <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
           <span className="h-px flex-1 bg-border" />
@@ -107,6 +109,14 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
         <time className="px-1 text-[11px] text-muted-foreground/80">
           {new Date(run.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </time>
+        {run.handoff && (
+          <Button type="button" size="xs" variant="ghost" className="text-link" onClick={() =>
+            document.getElementById(`board-run-${run.handoff!.sourceRunId}`)?.scrollIntoView({ block: "start" })
+          }>
+            <GitBranch className="size-3" aria-hidden="true" />
+            {composerCopy().handoff}
+          </Button>
+        )}
       </div>
 
       <RunActivity run={run} {...activity} />

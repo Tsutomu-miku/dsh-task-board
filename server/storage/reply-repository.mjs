@@ -7,6 +7,7 @@ export function createReplyRepository(db) {
   const newer = db.prepare(`SELECT ${columns} FROM assistant_replies WHERE card_id = ? AND id > ? ORDER BY id LIMIT ?`)
   const older = db.prepare(`SELECT ${columns} FROM assistant_replies WHERE card_id = ? AND id < ? ORDER BY id DESC LIMIT ?`)
   const latest = db.prepare(`SELECT ${columns} FROM assistant_replies WHERE card_id = ? ORDER BY id DESC LIMIT ?`)
+  const latestByRun = db.prepare("SELECT text FROM assistant_replies WHERE run_id = ? ORDER BY id DESC LIMIT 1")
   const deleteByCard = db.prepare("DELETE FROM assistant_replies WHERE card_id = ?")
 
   return {
@@ -15,6 +16,9 @@ export function createReplyRepository(db) {
     },
     list(cardId, after = 0) {
       return selectByCard.all(cardId, after)
+    },
+    latestText(runId) {
+      return latestByRun.get(runId)?.text
     },
     page(cardId, { before, after, limit, maxChars }) {
       const take = limit + 1

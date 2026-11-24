@@ -80,8 +80,10 @@ export function runCodex({
     function stop(cause) {
       if (stopReason) return
       stopReason = cause
-      if (child.connected) child.disconnect()
+      // Let fork's IPC and stdout close together after the worker exits. An
+      // eager IPC disconnect can leave the ChildProcess close event unsettled.
       killTimer = setTimeout(() => killGroup("SIGKILL"), 3000)
+      killGroup("SIGTERM")
     }
 
     const onAbort = () => stop(signal.reason)
