@@ -1,6 +1,6 @@
 import { type FormEvent, useRef, useState } from "react"
 import { ArrowUp, RotateCcw, Square } from "lucide-react"
-import { EngineAvatar } from "../../shared/components/engine-badge"
+import { EngineIcon } from "../../shared/components/engine-badge"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
@@ -9,6 +9,8 @@ import { ENGINES, type BoardSaveFn, type DefaultSendMode, type Executor, type Mo
 import { composerCopy } from "./composer-copy"
 import { ComposerModelPopover } from "./ComposerModelPopover"
 import { SendModeMenu } from "./SendModeMenu"
+
+const executorIconClass = "size-3 drop-shadow-sm"
 
 export function ComposerBox({ task, executors, running, queue, preference, save }: {
   task: TaskItem
@@ -182,7 +184,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
             <div aria-label={copy.chooseAgent} role="group" className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
               {candidates.map((item, index) => (
                 <Button key={item.id} type="button" size="xs" variant={index === 0 ? "secondary" : "outline"} onClick={() => pickMention(item.id)}>
-                  <EngineAvatar engine={item.engine} size="xs" />
+                  <EngineIcon engine={item.engine} className={executorIconClass} />
                   @{item.name}
                 </Button>
               ))}
@@ -194,21 +196,21 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
               <SelectTrigger size="sm" aria-label={copy.agent} className="min-w-0 max-w-full gap-1.5">
                 <span className="text-xs text-muted-foreground">{copy.executor}</span>
                 <SelectValue>
-                  {executor && <EngineAvatar engine={executor.engine} size="xs" />}
+                  {executor && <EngineIcon engine={executor.engine} className={executorIconClass} />}
                   <span className="truncate">{executor?.name ?? copy.chooseAgent}</span>
                 </SelectValue>
               </SelectTrigger>
               <SelectContent side="top">
                 <SelectItem value="default">
                   <span className="flex items-center gap-2">
-                    {taskExecutor && <EngineAvatar engine={taskExecutor.engine} size="xs" />}
+                    {taskExecutor && <EngineIcon engine={taskExecutor.engine} className={executorIconClass} />}
                     {copy.followDefault}{taskExecutor ? ` · ${taskExecutor.name}` : ""}
                   </span>
                 </SelectItem>
                 {executors.map(item => (
                   <SelectItem key={item.id} value={item.id} disabled={!item.enabled}>
                     <span className="flex items-center gap-2">
-                      <EngineAvatar engine={item.engine} size="xs" />
+                      <EngineIcon engine={item.engine} className={executorIconClass} />
                       {item.name}{item.name !== ENGINES[item.engine] ? ` · ${ENGINES[item.engine]}` : ""}
                     </span>
                   </SelectItem>
