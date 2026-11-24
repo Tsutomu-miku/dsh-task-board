@@ -1,17 +1,23 @@
-import { Sparkles, Terminal } from "lucide-react"
+import codexLogo from "../assets/icons/codex.svg"
+import dshLogo from "../assets/icons/dsh.svg"
 import { ENGINES, type Engine } from "../types/board"
 import { cn } from "../lib/utils"
 
-export function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
-  const Icon = engine === "dsh" ? Sparkles : Terminal
-  return <Icon className={cn("size-3.5 shrink-0", className)} strokeWidth={1.9} aria-hidden="true" />
+const logos = { dsh: dshLogo, codex: codexLogo }
+
+function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
+  return (
+    <img src={logos[engine]} alt="" width={16} height={16} draggable={false}
+      className={cn("size-3.5 shrink-0 object-contain", engine === "dsh" && "rounded-[18%] bg-white", className)}
+    />
+  )
 }
 
 export function EngineAvatar({ engine, size = "sm" }: { engine: Engine; size?: "xs" | "sm" | "md" }) {
   const sizes = {
-    xs: "size-5 rounded-md [&_svg]:size-3",
-    sm: "size-7 rounded-lg [&_svg]:size-3.5",
-    md: "size-10 rounded-xl [&_svg]:size-5",
+    xs: "size-5 rounded-md [&_img]:size-3.5",
+    sm: "size-7 rounded-lg [&_img]:size-4.5",
+    md: "size-10 rounded-xl [&_img]:size-6",
   }
   const palette = engine === "dsh"
     ? "bg-[var(--engine-dsh-soft)] text-[var(--engine-dsh)] border-[color-mix(in_srgb,var(--engine-dsh)_22%,transparent)]"
