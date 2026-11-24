@@ -1,49 +1,85 @@
 # DSH 任务看板
 
-面向 DSH Web 的本机任务看板插件，统一管理 DSH 原生会话与 Codex CLI 任务流转、可续跑会话、运行日志与执行器配置。基于 TypeScript、shadcn/ui、Tailwind CSS v4 与 Lucide Icons 构建，深度适配 DSH 浅色与深色主题。
-
-## 核心能力
-
-- **看板 & 列表双视图**：支持「待办 / 执行中 / 待验收 / 已完成」四列拖拽流转，以及紧凑列表视图，提供关键词搜索、工作目录与执行器组合筛选。
-- **完整任务管理**：支持新建、编辑（标题/执行器/工作目录/说明）、安全删除任务卡片，WSL 环境下支持直接填写 Windows 路径并自动转换。
-- **可续跑会话体验**：DSH 和 Codex 卡片都在看板内显示消息和输入区，执行步骤默认折叠，点击查看实时明细。会话使用 DSH 原生配色、间距和组件表面样式，支持模型选择、流式预览和继续会话。DSH 卡片也可手动打开原生会话。
-- **执行器集中配置**：统一管理 DSH / Codex 执行器、默认模型、推理强度、固定工作目录、DSH 预设与 Codex 沙箱权限。
+在 DSH Web 里管理本机任务，把同一张卡片交给 DSH 或 Codex 执行。卡片保留任务说明、会话和运行记录，支持按轮切换执行器并交接上下文。 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 
 ## 安装与升级
 
-本版本已在 DSH `0.2.2-rc.5` 与 Node.js 24 上验证。插件需要 Node.js 22.13 或更新版本，运行环境还需满足所用 DSH 版本的 Node.js 要求。
+准备好 Node.js 24.9 或更新版本，以及 pnpm。下文使用已在 macOS 上验证的 DSH `0.2.2-rc.5`。插件支持 macOS、Linux 和 WSL。使用 Codex 执行器时，先登录 Codex CLI，并确保启动 DSH Web 的终端能运行 `codex --version`。
 
-```sh
-dsh plugin --profile web add ./dsh-task-board-0.8.0.tgz
-dsh web
-```
+### 从源码构建
 
-在本机终端执行即可。看板由 DSH Web 加载，Codex 执行器从本机 `PATH` 启动 CLI，并使用该终端的 Codex 配置与登录。默认使用 `~/.codex`。升级时继续使用原 DSH Web profile，以保留已有任务和日志。
-
-## Agent context
-
-Type `@` in the composer to choose the executor for one message. The selected executor receives the new request and bounded context from earlier runs on the card. Returning to an executor resumes its last successful session when the workspace and preset still match, with context for the intervening runs. Choose a fresh session to start with the new request alone.
-
-Use the send-mode menu to send once or change the default for the DSH Web profile. **Queue** sends pending messages in order. **Send next** moves a message to the front and leaves the active run running. **Stop current run and take over** is available on the active card, and dispatches after that run has stopped and its outcome is saved. Pending messages persist across plugin restarts and can be canceled from the composer.
-
-DSH agents and Codex runs started from the board can use `board_list_tasks`, `board_read_context`, and `board_read_turns` to find cards and page through their prior requests, outcomes and committed replies. Several agents can read the same board concurrently.
-
-Other local MCP clients can launch the package's `dsh-task-board-mcp` executable over stdio. For example, with the standard DSH Web profile, register it in a standalone Codex CLI:
-
-```sh
-codex mcp add dsh-task-board -- "$HOME/.dsh/profiles/web/node_modules/.bin/dsh-task-board-mcp"
-```
-
-The server uses the Web profile under `DSH_HOME` by default. To read a different profile, pass `--profile-dir` with its directory. The server opens the existing SQLite database read-only and does not require DSH Web to be running. Configure this tool only for clients you want to access that local board.
-
-## 开发与验证
-
-```sh
+```zsh
+git clone https://github.com/Tsutomu-miku/dsh-task-board.git
+cd dsh-task-board
 npm ci
-npm run typecheck
-npm test
 npm run build
 npm pack
 ```
 
-模块划分与视觉规范见 [docs/design.md](docs/design.md)。第三方 UI 许可见 [SHADCN-LICENSE.md](SHADCN-LICENSE.md)。
+### 安装插件包
+
+`npm pack` 会输出安装包的文件名。已有 `.tgz` 安装包时，可直接在文件所在目录执行以下命令，文件名按实际版本替换。
+
+```zsh
+npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.8.0.tgz
+npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
+```
+
+终端已有 `dsh` 命令时，可直接执行上面从 `dsh` 开始的部分。打开 DSH Web 后，在侧边栏选择 **任务看板**。升级时沿用原 `web` profile，安装新版包后重启 DSH Web，再刷新页面。已有卡片、运行记录和会话会保留。
+
+## 开始使用
+
+1. 在 **执行器** 页面启用或新建 DSH、Codex 执行器。按需设置模型、推理强度、固定工作目录和权限。
+2. 创建任务卡片，填写任务说明并选择默认执行器。打开卡片发送第一条消息。
+3. 在输入框输入 `@`，选择本轮执行器。接手的 Agent 会收到任务说明和近期运行结果，并可按需读取更早的上下文。切回原执行器时，工作目录与预设兼容的会话可以续跑。
+4. 展开 **执行过程** 查看分页日志。任务运行时可查看最近命令和耗时，执行器上报用量时也会显示 token 统计。
+
+看板提供拖拽和列表两种视图。可按关键词、工作目录和执行器筛选任务。DSH 执行的轮次也可以打开原生会话。
+
+### 发送方式
+
+| 方式 | 有任务正在运行时 |
+| --- | --- |
+| **排队** | 放到等待队列末尾，按发送顺序执行。 |
+| **插队** | 放到等待队列最前，等当前运行结束后优先执行。 |
+| **停止当前并接管** | 在正在运行的卡片上停止当前轮，保存结果后启动下一轮。 |
+
+初始默认值是 **排队**。发送菜单可以设置整个 Web profile 的默认方式，也可只覆盖当前消息。待执行消息会在重启后保留，可在卡片底部取消。
+
+## 让其他 Agent 读取看板
+
+看板内的 DSH 和 Codex 可以直接调用以下只读工具。外部 Agent 可以通过本机 MCP 接入同一份上下文。
+
+| 工具 | 用途 |
+| --- | --- |
+| `board_list_tasks` | 按状态、工作目录或标题查找任务。 |
+| `board_read_context` | 读取任务说明、最新运行和分页的已保存回复。 |
+| `board_read_turns` | 分页读取用户请求、执行器和运行结果。 |
+
+把 MCP 注册到独立运行的 Codex CLI 时，可使用当前 DSH Web profile 路径。
+
+```zsh
+dsh_web_profile="${DSH_HOME:-$HOME/.dsh}/profiles/web"
+codex mcp add dsh-task-board -- \
+  "$dsh_web_profile/node_modules/.bin/dsh-task-board-mcp" \
+  --profile-dir "$dsh_web_profile"
+```
+
+MCP 通过 stdio 读取本机 profile 的 SQLite 数据。首次启动看板创建数据库后，DSH Web 退出时也可以读取历史。
+
+## 常见问题
+
+- **Git URL 安装提示 `Already up to date` 或「无法从依赖变更中确定安装了哪一个包」**。按上面的步骤构建并安装 `.tgz`，然后重启 DSH Web。
+- **侧边栏没有任务看板**。确认安装命令使用 `--profile web`，并重新启动该 profile。首次安装可以先运行一次 `dsh web` 确认 DSH 能正常启动。
+- **看板找不到 Codex**。在启动 DSH Web 的终端运行 `codex --version`，确认命令在 `PATH` 上。
+
+## 开发
+
+```zsh
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+参见 [架构与设计](docs/design.md) 和 [第三方 UI 许可](SHADCN-LICENSE.md)。
