@@ -24,6 +24,19 @@ export const RUN_STATUS_LABELS = {
 
 export type RunStatus = keyof typeof RUN_STATUS_LABELS
 
+export type DefaultSendMode = "queue" | "priority"
+export type SendMode = DefaultSendMode | "takeover"
+
+export interface QueuedMessage {
+  id: string
+  cardId: string
+  executorId: string
+  executorName: string
+  mode: SendMode
+  prompt: string
+  error: string | null
+}
+
 export const SANDBOX_LABELS = {
   "read-only": "只读",
   "workspace-write": "可写工作区",
@@ -73,6 +86,7 @@ export interface RunRecord {
   error: string | null
   session: string | null
   executor: Executor
+  handoff?: { sourceRunId: string; afterRunId: string | null; includedRunIds: string[] }
 }
 
 export interface RunEvent {
@@ -114,6 +128,8 @@ export interface BoardState {
   workspaceHost?: "wsl" | "local"
   executors: Executor[]
   defaultExecutor: string | null
+  defaultSendMode: DefaultSendMode
+  queue: QueuedMessage[]
 }
 
 export type BoardAction =
@@ -122,6 +138,18 @@ export type BoardAction =
   | { action: "delete"; id: string; from?: TaskStatus }
   | { action: "move"; id: string; from: TaskStatus; status: TaskStatus }
   | { action: "run"; id: string; from: TaskStatus; prompt: string; resume?: boolean; model?: ModelSelection | null }
+  | {
+      action: "send"
+      id: string
+      executorId: string
+      prompt: string
+      mode?: SendMode
+      runId?: string
+      freshSession?: boolean
+      model?: ModelSelection | null
+    }
+  | { action: "cancel-queued"; id: string; messageId: string }
+  | { action: "set-default-send-mode"; mode: DefaultSendMode }
   | { action: "stop"; id: string; runId?: string }
   | {
       action: "save-executor"

@@ -41,6 +41,8 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
             defaultWorkdir={board.workdir}
             workspaceHost={board.workspaceHost}
             running={runningTask}
+            queue={board.queue}
+            defaultSendMode={board.defaultSendMode}
             onBack={() => setSelectedTaskId(null)}
             save={save}
             openSession={openSession}

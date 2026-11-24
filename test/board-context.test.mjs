@@ -33,7 +33,7 @@ test("two MCP clients can page through the same board while DSH writes replies",
     }))))
     const [first, second] = clients
     assert.deepEqual((await first.listTools()).tools.map(tool => [tool.name, tool.annotations.readOnlyHint]), [
-      ["board_list_tasks", true], ["board_read_context", true],
+      ["board_list_tasks", true], ["board_read_context", true], ["board_read_turns", true],
     ])
     const task = board.act({ action: "create", title: "Shared work", prompt: "Implement the agreed plan" })
     board.act({ action: "create", title: "Another item", prompt: "Other task" })

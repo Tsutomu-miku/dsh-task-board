@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { resolveWorkspace } from "../config.mjs"
-import { BoardError, requireText } from "../errors.mjs"
+import { assertUuid, BoardError, requireText } from "../errors.mjs"
+import { createHandoff, taskBrief, withHandoff } from "./handoff.mjs"
 import { normalizeModel } from "./models.mjs"
 
 const RUN_RESULT_LABELS = {
@@ -10,8 +11,9 @@ const RUN_RESULT_LABELS = {
   interrupted: "运行已中断",
 }
 
-export function createRunManager({ cards, executors, events, replies, storage, run }) {
+export function createRunManager({ cards, executors, events, replies, queue, storage, run }) {
   let activeJob
+  let closing = false
 
   function recover(card) {
     if (card.status !== "running") return
@@ -22,7 +24,13 @@ export function createRunManager({ cards, executors, events, replies, storage, r
     events.add(attempt.id, "status", message)
   }
 
-  function start(card, input) {
+  function getEnabledExecutor(id) {
+    const executor = executors.get(id)
+    if (!executor.enabled) throw new BoardError(409, "此执行器已停用，请先在执行器页面启用。")
+    return executor
+  }
+
+  function start(card, input, queued = false) {
     if (activeJob) {
       throw new BoardError(409, "已有任务在运行，请等待或先停止它。")
     }
@@ -30,14 +38,17 @@ export function createRunManager({ cards, executors, events, replies, storage, r
     if (input.resume && !card.session) {
       throw new BoardError(400, "这张卡片还没有可继续的会话。")
     }
-    const executor = executors.get(card.executorId)
-    if (!executor.enabled) {
-      throw new BoardError(409, "此执行器已停用，请先在执行器页面启用。")
-    }
-
-    const session = input.resume ? card.session : null
-    const previous = session ? card.runs.find(attempt => attempt.session === session) : null
-    const workdir = resolveWorkspace(previous?.executor?.workdir ?? executor.workdir ?? card.workdir)
+    const executor = getEnabledExecutor(queued ? input.executorId : card.executorId)
+    const intendedWorkdir = executor.workdir ?? card.workdir
+    const targetWorkdir = queued ? resolveWorkspace(intendedWorkdir) : null
+    const previous = queued
+      ? !input.freshSession && card.runs.find(attempt =>
+          attempt.status === "succeeded" && attempt.session &&
+          attempt.executor.id === executor.id && attempt.executor.workdir === targetWorkdir &&
+          attempt.executor.preset === executor.preset)
+      : input.resume && card.runs.find(attempt => attempt.session === card.session)
+    const session = queued ? previous?.session ?? null : input.resume ? card.session : null
+    const workdir = targetWorkdir ?? resolveWorkspace(previous?.executor?.workdir ?? intendedWorkdir)
     const model = input.model === undefined
       ? (previous ? previous.executor?.model ?? null : executor.model ?? null)
       : normalizeModel(input.model, executor.engine)
@@ -52,9 +63,10 @@ export function createRunManager({ cards, executors, events, replies, storage, r
           .filter(attempt => attempt.session === session && attempt.status === "interrupted")
           .map(attempt => attempt.id)
       : []
+    const handoff = queued && !input.freshSession ? createHandoff(card, previous, replies) : null
 
     const latest = {
-      id: randomUUID(),
+      id: queued ? input.id : randomUUID(),
       started: Date.now(),
       status: "running",
       prompt,
@@ -62,12 +74,19 @@ export function createRunManager({ cards, executors, events, replies, storage, r
       error: null,
       session,
       executor: snapshot,
+      ...(handoff ? { handoff: {
+        sourceRunId: handoff.sourceRunId,
+        afterRunId: handoff.afterRunId,
+        includedRunIds: handoff.context.turns.map(turn => turn.runId),
+      } } : {}),
     }
+    card.brief ??= taskBrief(card)
     card.prompt = prompt
     card.runs.unshift(latest)
     storage.atomic(() => {
       cards.move(card, "running", "run")
       events.add(latest.id, "status", `开始运行 · ${executor.name}${model ? ` · ${model.id}` : ""}`)
+      if (queued) queue.remove(input.id, card.id)
     })
 
     const controller = new AbortController()
@@ -77,11 +96,59 @@ export function createRunManager({ cards, executors, events, replies, storage, r
       engine: executor.engine,
       executor: snapshot,
       workdir,
-      prompt,
+      prompt: withHandoff(prompt, handoff),
       session,
       interruptedRequests,
     })
     return card
+  }
+
+  function drain() {
+    while (!closing && !activeJob) {
+      const message = queue.next()
+      if (!message) return
+      try {
+        start(cards.get(message.cardId), message, true)
+      } catch (error) {
+        if (!(error instanceof BoardError)) throw error
+        queue.fail(message.id, error.message)
+      }
+    }
+  }
+
+  function stopJob(job) {
+    if (job.controller.signal.aborted) return
+    events.add(job.runId, "status", "已请求停止")
+    job.controller.abort("user")
+  }
+
+  function send(card, input) {
+    const mode = input.mode ?? queue.defaultMode()
+    if (!["queue", "priority", "takeover"].includes(mode)) {
+      throw new BoardError(400, "Invalid send mode.")
+    }
+    if (mode === "takeover") {
+      const runId = assertUuid(input.runId, "run ID")
+      if (activeJob && (activeJob.cardId !== card.id || activeJob.runId !== runId)) {
+        throw new BoardError(409, "The active run changed. Refresh before taking over.")
+      }
+    }
+    const executor = getEnabledExecutor(input.executorId ?? card.executorId)
+    resolveWorkspace(executor.workdir ?? card.workdir)
+    const message = {
+      id: randomUUID(),
+      cardId: card.id,
+      executorId: executor.id,
+      executorName: executor.name,
+      mode,
+      prompt: requireText(input.prompt, 16000, "任务说明"),
+      freshSession: input.freshSession === true,
+      ...(input.model !== undefined ? { model: normalizeModel(input.model, executor.engine) } : {}),
+    }
+    queue.add(message)
+    if (mode === "takeover" && activeJob) stopJob(activeJob)
+    drain()
+    return message
   }
 
   async function execute(job, card, attempt, options) {
@@ -129,7 +196,7 @@ export function createRunManager({ cards, executors, events, replies, storage, r
         onSession(id) {
           if (activeJob !== job) return
           attempt.session = id
-          card.session = id
+          if (attempt.executor.id === card.executorId) card.session = id
           storage.atomic(() => {
             cards.save(card)
             events.add(attempt.id, "status", options.session ? "已连接现有会话" : "已创建会话")
@@ -144,6 +211,7 @@ export function createRunManager({ cards, executors, events, replies, storage, r
       result = { status: "failed", output: result.output, error: "无法保存运行日志，已停止运行。" }
     }
 
+    let settled = false
     try {
       Object.assign(attempt, {
         status: result.status,
@@ -155,15 +223,30 @@ export function createRunManager({ cards, executors, events, replies, storage, r
         cards.move(card, result.status === "succeeded" ? "review" : "todo", result.status)
         events.add(attempt.id, "status", attempt.error || RUN_RESULT_LABELS[result.status] || "运行结束")
       })
+      settled = true
     } catch (error) {
       console.error("dsh-task-board: unable to persist run outcome", error.code ?? error.name)
     } finally {
       activeJob = undefined
     }
+    if (settled) {
+      try {
+        drain()
+      } catch (error) {
+        console.error("dsh-task-board: unable to dispatch queued messages", error.code ?? error.name)
+      }
+    }
   }
 
   return {
     start,
+    send,
+    setDefaultMode(mode) {
+      if (mode !== "queue" && mode !== "priority") throw new BoardError(400, "Invalid default send mode.")
+      queue.setDefaultMode(mode)
+      return { mode }
+    },
+    drain,
     recover,
     preview(cardId) {
       return activeJob?.cardId === cardId && activeJob.preview
@@ -174,13 +257,11 @@ export function createRunManager({ cards, executors, events, replies, storage, r
       if (activeJob?.cardId !== card.id || (runId && runId !== activeJob.runId)) {
         throw new BoardError(409, "这次运行已结束，请刷新后查看。")
       }
-      if (!activeJob.controller.signal.aborted) {
-        activeJob.controller.abort("user")
-        events.add(activeJob.runId, "status", "已请求停止")
-      }
+      stopJob(activeJob)
       return card
     },
     async close() {
+      closing = true
       activeJob?.controller.abort("shutdown")
       await activeJob?.done
     },

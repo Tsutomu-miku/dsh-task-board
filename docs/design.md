@@ -1,4 +1,4 @@
-# DSH 任务看板架构与设计（v0.6）
+# DSH 任务看板架构与设计
 
 ## 目标
 
@@ -57,3 +57,9 @@ npm test
 npm run build
 npm pack
 ```
+
+## Task dispatch
+
+The board sends one run at a time per profile. A submitted message records the card, executor, request, send mode, and explicit model choice. Dispatch claims the message and saves its run in the same SQLite transaction. Queue items survive restarts, and failed dispatches remain visible until dismissed. Takeover targets the selected active run and proceeds after its outcome has been committed.
+
+The card keeps its default executor and task brief. Each run stores its own executor snapshot and provider session. Context handoff records the source run, the prior run covered by the resumed session, and which historical excerpts were included. The original submitted request remains visible in the conversation.
