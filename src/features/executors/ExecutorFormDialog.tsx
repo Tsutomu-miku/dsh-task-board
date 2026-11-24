@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { FolderOpen, Layers, Shield, SlidersHorizontal, Tag } from "lucide-react"
+import { EngineAvatar } from "../../shared/components/engine-badge"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import {
@@ -108,8 +109,8 @@ export function ExecutorFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="dsh">DSH（原生宿主会话）</SelectItem>
-                <SelectItem value="codex">Codex（本机 CLI）</SelectItem>
+                <SelectItem value="dsh"><span className="flex items-center gap-2"><EngineAvatar engine="dsh" size="xs" />DSH（原生宿主会话）</span></SelectItem>
+                <SelectItem value="codex"><span className="flex items-center gap-2"><EngineAvatar engine="codex" size="xs" />Codex（本机 CLI）</span></SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -1,13 +1,13 @@
-import { type FormEvent, useId, useRef, useState } from "react"
-import { ArrowUp, AtSign, Cpu, RotateCcw, Square } from "lucide-react"
+import { type FormEvent, useRef, useState } from "react"
+import { ArrowUp, RotateCcw, Square } from "lucide-react"
+import { EngineAvatar } from "../../shared/components/engine-badge"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
 import { Textarea } from "../../shared/components/ui/textarea"
-import { ModelPicker } from "../../shared/components/model-picker"
-import { useEnvironment } from "../../shared/hooks/use-environment"
 import { ENGINES, type BoardSaveFn, type DefaultSendMode, type Executor, type ModelSelection, type QueuedMessage, type SendMode, type TaskItem } from "../../shared/types/board"
 import { composerCopy } from "./composer-copy"
+import { ComposerModelPopover } from "./ComposerModelPopover"
 import { SendModeMenu } from "./SendModeMenu"
 
 export function ComposerBox({ task, executors, running, queue, preference, save }: {
@@ -25,10 +25,8 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [stoppingRun, setStoppingRun] = useState<string>()
-  const [showModel, setShowModel] = useState(false)
   const [freshSession, setFreshSession] = useState(false)
   const [model, setModel] = useState<ModelSelection | null>(null)
-  const composerId = useId()
   const textarea = useRef<HTMLTextAreaElement>(null)
   const copy = composerCopy()
 
@@ -41,7 +39,9 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const previous = task.runs.find(run =>
     run.session && run.status === "succeeded" && run.executor.id === executor?.id &&
     run.executor.workdir === workdir && run.executor.preset === executor?.preset)
-  const { environment, checking } = useEnvironment(workdir, showModel)
+  const resume = Boolean(previous && !freshSession)
+  const inheritedModel = resume ? previous?.executor.model ?? null : executor?.model ?? null
+  const taskExecutor = executors.find(item => item.id === task.executorId)
   const override = selectedMode?.runId === runningId ? selectedMode : null
   const mode = override?.mode ?? preference
   const mention = target === null ? /^@([^\r\n]*)$/.exec(draft)?.[1]?.toLowerCase() : undefined
@@ -100,7 +100,6 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
       setDraft(current => current === submitted ? "" : current)
       selectExecutor(null)
       setSelectedMode(null)
-      setShowModel(false)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -183,38 +182,35 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
             <div aria-label={copy.chooseAgent} role="group" className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
               {candidates.map((item, index) => (
                 <Button key={item.id} type="button" size="xs" variant={index === 0 ? "secondary" : "outline"} onClick={() => pickMention(item.id)}>
-                  @{item.name} <span className="text-muted-foreground">{ENGINES[item.engine]}</span>
+                  <EngineAvatar engine={item.engine} size="xs" />
+                  @{item.name}
                 </Button>
               ))}
             </div>
           )}
 
-          {showModel && executor && (
-            <div className="rounded-xl border border-[var(--board-line-soft)] bg-[var(--board-lane)] p-3">
-              <ModelPicker
-                id={`${composerId}-model`}
-                compact
-                models={environment?.models[executor.engine] ?? []}
-                value={model}
-                onChange={setModel}
-                defaultLabel={previous && !freshSession ? copy.usePreviousModel : copy.executorModel}
-                checking={checking}
-                disabled={busy}
-              />
-            </div>
-          )}
-
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <Select value={target ?? "default"} onValueChange={value => selectExecutor(value === "default" ? null : value)} disabled={busy}>
-              <SelectTrigger size="sm" aria-label={copy.agent} className="gap-1">
-                <AtSign className="size-3.5" aria-hidden="true" />
-                <SelectValue />
+              <SelectTrigger size="sm" aria-label={copy.agent} className="min-w-0 max-w-full gap-1.5">
+                <span className="text-xs text-muted-foreground">{copy.executor}</span>
+                <SelectValue>
+                  {executor && <EngineAvatar engine={executor.engine} size="xs" />}
+                  <span className="truncate">{executor?.name ?? copy.chooseAgent}</span>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent side="top">
-                <SelectItem value="default">{copy.followDefault}{target === null && executor ? ` · ${executor.name}` : ""}</SelectItem>
+                <SelectItem value="default">
+                  <span className="flex items-center gap-2">
+                    {taskExecutor && <EngineAvatar engine={taskExecutor.engine} size="xs" />}
+                    {copy.followDefault}{taskExecutor ? ` · ${taskExecutor.name}` : ""}
+                  </span>
+                </SelectItem>
                 {executors.map(item => (
                   <SelectItem key={item.id} value={item.id} disabled={!item.enabled}>
-                    {item.name} · {ENGINES[item.engine]}
+                    <span className="flex items-center gap-2">
+                      <EngineAvatar engine={item.engine} size="xs" />
+                      {item.name}{item.name !== ENGINES[item.engine] ? ` · ${ENGINES[item.engine]}` : ""}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -227,13 +223,12 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
               </Button>
             )}
 
-            <Button type="button" size="xs" variant={showModel || model ? "secondary" : "ghost"} aria-expanded={showModel}
-              onClick={() => setShowModel(value => !value)} disabled={!executor?.enabled}
-              className="max-w-[220px] text-muted-foreground"
-            >
-              <Cpu className="size-3.5" aria-hidden="true" />
-              <span className="truncate">{model ? `${model.id}${model.effort ? ` · ${model.effort}` : ""}` : copy.model}</span>
-            </Button>
+            {executor && (
+              <ComposerModelPopover key={executor.id} engine={executor.engine} workdir={workdir}
+                value={model} inherited={inheritedModel} resume={resume}
+                disabled={busy || !executor.enabled} onChange={setModel}
+              />
+            )}
 
             <div className="ml-auto flex items-center gap-2">
               {runningId && (

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Cpu, FileText, FolderOpen, Type } from "lucide-react"
+import { EngineAvatar } from "../../shared/components/engine-badge"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import {
@@ -115,8 +116,11 @@ export function TaskFormDialog({
               <SelectContent>
                 {enabledExecutors.map(row => (
                   <SelectItem key={row.id} value={row.id}>
-                    {row.name} · {ENGINES[row.engine]}
-                    {row.model ? ` (${row.model.id})` : ""}
+                    <span className="flex items-center gap-2">
+                      <EngineAvatar engine={row.engine} size="xs" />
+                      {row.name}{row.name !== ENGINES[row.engine] ? ` · ${ENGINES[row.engine]}` : ""}
+                      {row.model ? ` (${row.model.id})` : ""}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
