@@ -123,7 +123,7 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
 
       <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
         <div className="conversation-meta flex flex-wrap items-center gap-2">
-          <EngineIcon engine={run.executor.engine} className="size-5 drop-shadow-sm" />
+          <EngineIcon engine={run.executor.engine} className="size-4 drop-shadow-sm" />
           <span>{run.executor.name}</span>
           {run.executor.model && (
             <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">

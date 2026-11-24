@@ -10,7 +10,7 @@ import { composerCopy } from "./composer-copy"
 import { ComposerModelPopover } from "./ComposerModelPopover"
 import { SendModeMenu } from "./SendModeMenu"
 
-const executorIconClass = "size-3 drop-shadow-sm"
+const executorIconClass = "size-4 drop-shadow-sm"
 
 export function ComposerBox({ task, executors, running, queue, preference, save }: {
   task: TaskItem
