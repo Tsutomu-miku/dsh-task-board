@@ -3,7 +3,7 @@ import Markdown from "react-markdown"
 import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
-import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
+import { EngineAvatar } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
 import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskItem, type Transcript } from "../../shared/types/board"
@@ -123,7 +123,7 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
 
       <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
         <div className="conversation-meta flex flex-wrap items-center gap-2">
-          <EngineIcon engine={run.executor.engine} />
+          <EngineAvatar engine={run.executor.engine} size="xs" />
           <span>{run.executor.name}</span>
           {run.executor.model && (
             <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">

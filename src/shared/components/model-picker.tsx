@@ -1,22 +1,10 @@
 import { Cpu, Gauge } from "lucide-react"
+import { effortLabel, groupModels, modelKey } from "../lib/model-catalog"
 import { Label } from "./ui/label"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./ui/select"
 import type { ModelChoice, ModelSelection } from "../types/board"
 
 const INHERIT_VALUE = "default"
-
-const EFFORT_LABELS: Record<string, string> = {
-  none: "关闭",
-  minimal: "极低",
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "很高",
-  max: "最高",
-  ultra: "超高",
-}
-
-const modelKey = (model: ModelSelection) => JSON.stringify([model.provider ?? null, model.id])
 
 export function ModelPicker({
   id,
@@ -26,7 +14,6 @@ export function ModelPicker({
   defaultLabel,
   checking,
   disabled,
-  compact = false,
 }: {
   id: string
   models: ModelChoice[]
@@ -35,14 +22,9 @@ export function ModelPicker({
   defaultLabel: string
   checking: boolean
   disabled?: boolean
-  compact?: boolean
 }) {
   const selected = value ? models.find(model => modelKey(model) === modelKey(value)) : undefined
-  const groups = new Map<string, ModelChoice[]>()
-  for (const item of models) {
-    const groupKey = item.providerName ?? item.provider ?? ""
-    groups.set(groupKey, [...(groups.get(groupKey) ?? []), item])
-  }
+  const groups = groupModels(models)
 
   function handleSelect(key: string) {
     const match = models.find(item => modelKey(item) === key)
@@ -52,14 +34,14 @@ export function ModelPicker({
   const showEffort = Boolean(value && selected && (selected.efforts.length > 0 || value.effort))
 
   return (
-    <div className={compact ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2" : "grid min-w-0 gap-3.5"}>
+    <div className="grid min-w-0 gap-3.5">
       <div className="grid min-w-0 gap-1.5">
         <Label htmlFor={id} className="text-xs text-muted-foreground">
           <Cpu className="size-3.5" aria-hidden="true" />
           模型
         </Label>
         <Select value={value ? modelKey(value) : INHERIT_VALUE} onValueChange={handleSelect} disabled={disabled}>
-          <SelectTrigger id={id} size={compact ? "sm" : "default"} className="w-full min-w-0">
+          <SelectTrigger id={id} className="w-full min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" className="max-w-[min(28rem,90vw)]">
@@ -99,7 +81,7 @@ export function ModelPicker({
             disabled={disabled}
             onValueChange={effort => onChange({ ...value, effort: effort === INHERIT_VALUE ? undefined : effort })}
           >
-            <SelectTrigger id={`${id}-effort`} size={compact ? "sm" : "default"} className="w-full min-w-0">
+            <SelectTrigger id={`${id}-effort`} className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -111,7 +93,7 @@ export function ModelPicker({
               )}
               {selected.efforts.map(row => (
                 <SelectItem key={row.id} value={row.id}>
-                  {EFFORT_LABELS[row.id] ?? row.name}
+                  {effortLabel(row, true)}
                 </SelectItem>
               ))}
             </SelectContent>
