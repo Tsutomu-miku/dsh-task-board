@@ -6,15 +6,20 @@ import { UUID_PATTERN } from "../../errors.mjs"
 import { reportCodexActivity } from "./activity.mjs"
 
 const WORKER_PATH = fileURLToPath(new URL("./worker.mjs", import.meta.url))
-const RUN_TIMEOUT_MS = 30 * 60 * 1000
 
-export function codexArgs(session, sandbox, model) {
+export function codexArgs(session, sandbox, model, contextServer) {
   if (session && !UUID_PATTERN.test(session)) {
     throw new Error("无效的 Codex 会话编号。")
   }
   const args = ["exec", "--json", "--sandbox", sandbox, "--skip-git-repo-check"]
   if (sandbox === "danger-full-access") args.push("-c", 'approval_policy="never"')
   if (model?.effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(model.effort)}`)
+  if (contextServer) {
+    args.push(
+      "-c", `mcp_servers.dsh_task_board.command=${JSON.stringify(contextServer.command)}`,
+      "-c", `mcp_servers.dsh_task_board.args=${JSON.stringify(contextServer.args)}`,
+    )
+  }
   if (session) args.push("resume", "--json")
   if (model) args.push("--model", model.id)
   if (session) args.push(session)
@@ -28,6 +33,7 @@ export function runCodex({
   sandbox,
   model,
   tempDir,
+  contextServer,
   signal,
   onSession,
   onEvent,
@@ -35,13 +41,12 @@ export function runCodex({
   onUsage,
 }) {
   const mapStopResult = reason => ({
-    status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
-    error: reason === "timeout" ? "Codex 运行超过 30 分钟，进程已停止。" : null,
+    status: reason === "shutdown" ? "interrupted" : "stopped",
   })
 
   if (signal.aborted) return Promise.resolve(mapStopResult(signal.reason))
 
-  const args = codexArgs(session, sandbox, model)
+  const args = codexArgs(session, sandbox, model, contextServer)
   // Keep TMPDIR pinned inside the persistent profile directory so detached DSH Web
   // hosts can create Codex sandbox mounts even after a launcher's temp dir expires.
   mkdirSync(tempDir, { recursive: true, mode: 0o700 })
@@ -75,12 +80,13 @@ export function runCodex({
     function stop(cause) {
       if (stopReason) return
       stopReason = cause
-      if (child.connected) child.disconnect()
+      // Let fork's IPC and stdout close together after the worker exits. An
+      // eager IPC disconnect can leave the ChildProcess close event unsettled.
       killTimer = setTimeout(() => killGroup("SIGKILL"), 3000)
+      killGroup("SIGTERM")
     }
 
     const onAbort = () => stop(signal.reason)
-    const deadline = setTimeout(() => stop("timeout"), RUN_TIMEOUT_MS)
     signal.addEventListener("abort", onAbort, { once: true })
 
     child.stdin.on("error", () => {})
@@ -141,7 +147,6 @@ export function runCodex({
     })
 
     child.once("close", code => {
-      clearTimeout(deadline)
       clearTimeout(killTimer)
       signal.removeEventListener("abort", onAbort)
       if (stopReason && stopReason !== "persistence") {

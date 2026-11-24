@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { formatDuration } from "../../shared/lib/format"
 import type { RunRecord } from "../../shared/types/board"
 
-const numberFormat = new Intl.NumberFormat("zh-CN")
+const numberFormat = new Intl.NumberFormat()
 
 export function RunMetrics({ run }: { run: RunRecord }) {
   const [now, setNow] = useState(Date.now)

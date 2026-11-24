@@ -25,6 +25,16 @@ async function parseJsonBody(request) {
   return assertPlainObject(parsed)
 }
 
+function queryInteger(query, key, min, max = Number.MAX_SAFE_INTEGER) {
+  const raw = query.get(key)
+  if (raw === null) return undefined
+  const value = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new BoardError(400, `Invalid ${key}.`)
+  }
+  return value
+}
+
 export function registerRoutes(ctx, { board, css, environment }) {
   function register(path, methods, handler) {
     ctx.effect(() =>
@@ -72,8 +82,9 @@ export function registerRoutes(ctx, { board, css, environment }) {
   })
 
   registerJson("conversation", "GET", request => {
-    const cardId = assertUuid(new URL(request.url).searchParams.get("card"), "任务编号")
-    return board.conversation(cardId)
+    const query = new URL(request.url).searchParams
+    const cardId = assertUuid(query.get("card"), "任务编号")
+    return board.conversation(cardId, queryInteger(query, "after", 0))
   })
 
   registerJson("events", "GET", request => {
@@ -82,6 +93,16 @@ export function registerRoutes(ctx, { board, css, environment }) {
     const after = Number(query.get("after") ?? "0")
     if (!Number.isSafeInteger(after) || after < 0) throw new BoardError(400, "无效的事件游标。")
     return board.events(runId, after)
+  })
+
+  registerJson("activity", "GET", request => {
+    const query = new URL(request.url).searchParams
+    const runId = assertUuid(query.get("run"), "run ID")
+    const before = queryInteger(query, "before", 1)
+    const after = queryInteger(query, "after", 0)
+    const limit = queryInteger(query, "limit", 0, 100) ?? 50
+    if (before !== undefined && after !== undefined) throw new BoardError(400, "Use only one activity cursor.")
+    return board.activity(runId, { before, after, limit })
   })
 
   registerJson("action", "POST", async request => board.act(await parseJsonBody(request)))

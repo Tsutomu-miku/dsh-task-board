@@ -5,6 +5,8 @@ import { openDatabase } from "../storage/database.mjs"
 import { createEventRepository } from "../storage/event-repository.mjs"
 import { createExecutorRepository } from "../storage/executor-repository.mjs"
 import { createReplyRepository } from "../storage/reply-repository.mjs"
+import { createQueueRepository } from "../storage/queue-repository.mjs"
+import { createBoardContext } from "./board-context.mjs"
 import { createCardManager } from "./cards.mjs"
 import { createExecutorManager, EXECUTOR_ACTIONS } from "./executors.mjs"
 import { createRunManager } from "./runs.mjs"
@@ -27,6 +29,8 @@ export function openBoard({
   try {
     const events = createEventRepository(storage.db)
     const replies = createReplyRepository(storage.db)
+    const queue = createQueueRepository(storage.db)
+    const context = createBoardContext(storage.db, replies)
     const executors = createExecutorManager({
       store: createExecutorRepository(storage.db),
       codexSandbox,
@@ -43,10 +47,11 @@ export function openBoard({
       executors,
       replies,
       events,
+      queue,
       storage,
       workdir,
     })
-    const runs = createRunManager({ cards, executors, events, replies, storage, run })
+    const runs = createRunManager({ cards, executors, events, replies, queue, storage, run })
 
     storage.atomic(() => {
       executors.seed()
@@ -55,6 +60,7 @@ export function openBoard({
         runs.recover(card)
       }
     })
+    runs.drain()
 
     const cardActions = {
       run: (card, input) => runs.start(card, input),
@@ -72,6 +78,8 @@ export function openBoard({
           cards: cards.list(),
           executors: executors.list(),
           defaultExecutor: executors.defaultId(),
+          defaultSendMode: queue.defaultMode(),
+          queue: queue.list(),
         }
       },
 
@@ -80,19 +88,35 @@ export function openBoard({
         return events.list(runId, after)
       },
 
-      conversation(cardId) {
+      activity(runId, page) {
+        assertOpen()
+        return events.activity(runId, page)
+      },
+
+      context(name, args) {
+        assertOpen()
+        return context.call(name, args)
+      },
+
+      conversation(cardId, after) {
         assertOpen()
         cards.get(cardId)
-        return { replies: replies.list(cardId), preview: runs.preview(cardId) }
+        return { replies: replies.list(cardId, after), preview: runs.preview(cardId) }
       },
 
       act(input) {
         assertOpen()
         if (EXECUTOR_ACTIONS.has(input.action)) return executors.act(input)
         if (input.action === "create") return cards.create(input)
+        if (input.action === "set-default-send-mode") return runs.setDefaultMode(input.mode)
 
         const card = cards.get(input.id)
         if (input.action === "stop") return runs.stop(card, input.runId)
+        if (input.action === "send") return runs.send(card, input)
+        if (input.action === "cancel-queued") {
+          if (!queue.remove(input.messageId, card.id)) throw new BoardError(409, "This message has left the queue.")
+          return { canceled: input.messageId }
+        }
         if (card.status === "running") throw new BoardError(409, "卡片正在执行。")
 
         const handler = cardActions[input.action]

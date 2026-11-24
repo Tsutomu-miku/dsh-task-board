@@ -1,4 +1,4 @@
-# DSH 任务看板架构与设计（v0.6）
+# DSH 任务看板架构与设计
 
 ## 目标
 
@@ -43,10 +43,12 @@
 
 ## 数据兼容与验证
 
-- 沿用既有 SQLite 表结构。活动运行按事件序号增量读取日志，展开后按事件时间从早到晚显示，时间相同时按序号排列。日志包含执行中穿插的回复，过长的事件文本会标明截断。
+- 沿用既有 SQLite 表结构。折叠时只读取当前运行的最新命令，展开后分页读取日志。每页按事件时间从早到晚显示，时间相同时按序号排列。会话轮询只读取新回复，后台标签页暂停轮询。
 - 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。会话在运行中展示最新一条命令。
 - 平均 TPM 以本次运行收到的 token 用量除以执行时长（分钟）。DSH 汇总当前运行已提交的模型步骤。Codex CLI 在完成时报告用量，续跑时展示会话累计用量。
 - 看板会话通过 `src/styles/conversation.css` 使用 DSH 原生主题变量。用户消息使用 DSH 气泡底色，执行过程采用原生会话的细分隔和单列步骤，输入框使用 DSH 的柔和阴影与圆角。执行步骤默认折叠，标题保留运行状态和事件数，展开即可查看实时明细。 [原生消息样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/MessageItem.module.css) · [原生执行过程样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/TurnProcessNodeView.module.css) · [原生输入区样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css)
+- DSH 工具与本机 stdio MCP 共享同一个只读上下文查询。任务和运行使用看板 ID，回复使用独立游标，客户端可以在多个 Agent 之间传递任务 ID 并按需读取。MCP 使用 SQLite 只读连接，和 DSH 的写入同用 WAL。
+- 执行时长由执行器和宿主控制。看板支持手动停止和宿主关闭时的中断处理。
 - 验证流程：
 
 ```sh
@@ -55,3 +57,9 @@ npm test
 npm run build
 npm pack
 ```
+
+## Task dispatch
+
+The board sends one run at a time per profile. A submitted message records the card, executor, request, send mode, and explicit model choice. Dispatch claims the message and saves its run in the same SQLite transaction. Queue items survive restarts, and failed dispatches remain visible until dismissed. Takeover targets the selected active run and proceeds after its outcome has been committed.
+
+The card keeps its default executor and task brief. Each run stores its own executor snapshot and provider session. Context handoff records the source run, the prior run covered by the resumed session, and which historical excerpts were included. The original submitted request remains visible in the conversation.

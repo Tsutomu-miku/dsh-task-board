@@ -115,5 +115,10 @@ test("Codex arguments only resume the stored session", () => {
     "exec", "--json", "--sandbox", "danger-full-access", "--skip-git-repo-check",
     "-c", 'approval_policy="never"', "resume", "--json", session, "-",
   ])
+  const connected = codexArgs(session, "read-only", null, {
+    command: "/path with spaces/node", args: ["/plugin/mcp.mjs", "--profile-dir", "/profile"],
+  })
+  assert.ok(connected.includes('mcp_servers.dsh_task_board.command="/path with spaces/node"'))
+  assert.ok(connected.includes('mcp_servers.dsh_task_board.args=["/plugin/mcp.mjs","--profile-dir","/profile"]'))
   assert.throws(() => codexArgs("--last", "read-only"), /无效/)
 })

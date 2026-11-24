@@ -5,7 +5,7 @@ import { builtinExecutorId } from "./executors.mjs"
 
 const MOVABLE_STATUSES = new Set(["todo", "review", "done"])
 
-export function createCardManager({ store, executors, replies, events, storage, workdir }) {
+export function createCardManager({ store, executors, replies, events, queue, storage, workdir }) {
   function move(card, status, cause) {
     if (card.status !== status) {
       card.history.push({ from: card.status, to: status, cause, at: Date.now() })
@@ -30,10 +30,12 @@ export function createCardManager({ store, executors, replies, events, storage, 
     const rawWorkdir = typeof input.workdir === "string" ? input.workdir.trim() : ""
     const resolvedWorkdir = rawWorkdir ? resolveWorkspace(rawWorkdir) : (executor.workdir ?? workdir)
     const created = Date.now()
+    const brief = requireText(input.prompt, 16000, "任务说明")
     const card = {
       id: randomUUID(),
       title: requireText(input.title, 120, "标题"),
-      prompt: requireText(input.prompt, 16000, "任务说明"),
+      prompt: brief,
+      brief,
       engine: executor.engine,
       executorId: id,
       workdir: resolvedWorkdir,
@@ -53,14 +55,12 @@ export function createCardManager({ store, executors, replies, events, storage, 
     }
     if (input.prompt !== undefined) {
       card.prompt = requireText(input.prompt, 16000, "任务说明")
+      card.brief = card.prompt
     }
     if (input.executorId !== undefined && input.executorId !== card.executorId) {
       const executor = executors.get(input.executorId)
       if (!executor.enabled) throw new BoardError(409, "请选择已启用的执行器。")
-      // Changing executor resets the active session pointer if engine changes
-      if (executor.engine !== card.engine) {
-        card.session = null
-      }
+      card.session = card.runs.find(run => run.executor.id === executor.id && run.session)?.session ?? null
       card.executorId = executor.id
       card.engine = executor.engine
     }
@@ -77,6 +77,7 @@ export function createCardManager({ store, executors, replies, events, storage, 
     const runIds = card.runs.map(run => run.id)
     storage.atomic(() => {
       replies.removeByCard(card.id)
+      queue.removeByCard(card.id)
       events.removeByRuns(runIds)
       store.remove(card.id)
     })

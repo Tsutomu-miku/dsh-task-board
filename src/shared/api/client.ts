@@ -33,11 +33,22 @@ export function fetchEnvironment(workspace: string | null, refresh: boolean, sig
   return request<EnvironmentInfo>(query ? `environment?${query}` : "environment", { signal })
 }
 
-export function fetchConversation(cardId: string, signal?: AbortSignal): Promise<Transcript> {
-  return request<Transcript>(`conversation?card=${encodeURIComponent(cardId)}`, { signal })
+export function fetchConversation(cardId: string, after: number, signal: AbortSignal): Promise<Transcript> {
+  const query = new URLSearchParams({ card: cardId, after: String(after) })
+  return request<Transcript>(`conversation?${query}`, { signal })
 }
 
-export function fetchRunEvents(runId: string, after: number, signal?: AbortSignal): Promise<RunEvent[]> {
-  const query = new URLSearchParams({ run: runId, after: String(after) })
-  return request<RunEvent[]>(`events?${query}`, { signal })
+export interface ActivityPage {
+  events: RunEvent[]
+  hasMore: boolean
+  latestCommand: string | null
+}
+
+export function fetchRunActivity(
+  runId: string, page: { before?: number; after?: number; limit: number }, signal: AbortSignal,
+): Promise<ActivityPage> {
+  const query = new URLSearchParams({ run: runId, limit: String(page.limit) })
+  if (page.before !== undefined) query.set("before", String(page.before))
+  if (page.after !== undefined) query.set("after", String(page.after))
+  return request<ActivityPage>(`activity?${query}`, { signal })
 }

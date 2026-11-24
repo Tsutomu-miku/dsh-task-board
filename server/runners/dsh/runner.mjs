@@ -1,8 +1,6 @@
 import { applyDshModel } from "./model.mjs"
 import { followDshPreview } from "./preview.mjs"
 
-const RUN_TIMEOUT_MS = 30 * 60 * 1000
-
 function shellCommand({ name, arguments: raw }) {
   if (name !== "bash" && name !== "pwsh") return
   let args
@@ -26,9 +24,6 @@ function mapTurnResult(reason, output) {
 }
 
 function mapAbortedResult(signal) {
-  if (signal.reason === "timeout") {
-    return { status: "failed", error: "DSH 运行超过 30 分钟，已请求停止。" }
-  }
   return { status: signal.reason === "shutdown" ? "interrupted" : "stopped" }
 }
 
@@ -39,15 +34,12 @@ export async function runDsh(ctx, {
   session,
   requestId,
   interruptedRequests,
-  signal: callerSignal,
+  signal,
   onSession,
   onEvent,
   onPreview,
   onUsage,
 }) {
-  const timeout = new AbortController()
-  const deadline = setTimeout(() => timeout.abort("timeout"), RUN_TIMEOUT_MS)
-  const signal = AbortSignal.any([callerSignal, timeout.signal])
   const { sessionController, sessions } = ctx
 
   let disposeEvents
@@ -179,7 +171,6 @@ export async function runDsh(ctx, {
     if (signal.aborted) return { ...mapAbortedResult(signal), output }
     return { status: "failed", output, error: error.message ?? "DSH 运行失败。" }
   } finally {
-    clearTimeout(deadline)
     if (stopHandler) signal.removeEventListener("abort", stopHandler)
     disposePreview?.()
     disposeEvents?.()

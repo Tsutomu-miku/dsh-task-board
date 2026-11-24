@@ -50,3 +50,36 @@ process.stdin.on('end', () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test("stopping a running Codex worker settles with its committed output", { timeout: 8000 }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dsh-codex-stop-"))
+  const originalPath = process.env.PATH
+  try {
+    await writeFile(join(dir, "codex"), `#!/usr/bin/env node
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({type: 'item.completed', item: {type: 'agent_message', text: 'Work recorded'}}));
+  setInterval(() => {}, 1000);
+});
+`, { mode: 0o700 })
+    process.env.PATH = `${dir}:${originalPath}`
+    const controller = new AbortController()
+    const result = await runCodex({
+      workdir: dir,
+      prompt: "Work until stopped",
+      sandbox: "read-only",
+      tempDir: join(dir, "temp"),
+      signal: controller.signal,
+      onSession() {},
+      onPreview() {},
+      onUsage() {},
+      onEvent(kind) {
+        if (kind === "output") controller.abort("user")
+      },
+    })
+    assert.deepEqual(result, { status: "stopped", output: "Work recorded" })
+  } finally {
+    process.env.PATH = originalPath
+    await rm(dir, { recursive: true, force: true })
+  }
+})

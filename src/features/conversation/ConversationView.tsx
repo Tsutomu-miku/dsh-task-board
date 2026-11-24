@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { EngineChip } from "../../shared/components/engine-badge"
 import { TaskStatusIcon, TaskStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
-import { COLUMNS, type BoardSaveFn, type Executor, type TaskItem, type TaskStatus } from "../../shared/types/board"
+import { COLUMNS, type BoardSaveFn, type DefaultSendMode, type Executor, type QueuedMessage, type TaskItem, type TaskStatus } from "../../shared/types/board"
 import { TaskFormDialog } from "../board/TaskFormDialog"
 import { ComposerBox } from "./ComposerBox"
 import { MessageStream } from "./MessageStream"
@@ -19,6 +19,8 @@ export function ConversationView({
   defaultWorkdir,
   workspaceHost,
   running,
+  queue,
+  defaultSendMode,
   onBack,
   save,
   openSession,
@@ -28,6 +30,8 @@ export function ConversationView({
   defaultWorkdir: string
   workspaceHost?: "wsl" | "local"
   running?: TaskItem
+  queue: QueuedMessage[]
+  defaultSendMode: DefaultSendMode
   onBack: () => void
   save: BoardSaveFn
   openSession: (id: string) => void
@@ -133,7 +137,7 @@ export function ConversationView({
 
       <MessageStream task={task} executor={executor} transcript={transcript} error={error} />
 
-      <ComposerBox task={task} executor={executor} running={running} save={save} />
+      <ComposerBox task={task} executors={executors} running={running} queue={queue} preference={defaultSendMode} save={save} />
 
       {showHistory && (
         <RunHistoryDialog task={task} onClose={() => setShowHistory(false)} openSession={openSession} />
