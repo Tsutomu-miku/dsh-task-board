@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 import { openBoard } from "../server/domain/board-service.mjs"
 import { followDshPreview } from "../server/runners/dsh/preview.mjs"
+import { runDsh } from "../server/runners/dsh/runner.mjs"
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
@@ -30,10 +31,18 @@ test("conversation keeps committed replies, isolates previews and resumes the sa
     calls[0].callbacks.onPreview("正在输")
     assert.deepEqual(board.conversation(active.id).preview, { runId: attempt.id, text: "正在输" })
     assert.deepEqual(board.conversation(other.id), { replies: [], preview: null })
-    calls[0].callbacks.onEvent("output", "第一段回复")
-    calls[0].callbacks.onEvent("tool", "tool-name")
+    const eventTime = Date.now()
+    calls[0].callbacks.onEvent("output", "第一段回复", eventTime)
+    calls[0].callbacks.onEvent("command", "pwd", eventTime)
+    calls[0].callbacks.onEvent("tool", "tool-name", eventTime + 1)
+    calls[0].callbacks.onUsage(110)
+    calls[0].callbacks.onUsage(35)
+    assert.deepEqual(board.read().cards[0].runs[0].usage, { tokens: 145, scope: "run" })
     assert.equal(board.conversation(active.id).preview, null)
     const before = board.events(attempt.id)
+    assert.deepEqual(before.slice(-3).map(({ kind, at }) => [kind, at]), [
+      ["output", eventTime], ["command", eventTime], ["tool", eventTime + 1],
+    ])
     for (let i = 0; i < 260; i++) calls[0].callbacks.onEvent("tool_result", `result-${i}`)
     const updates = board.events(attempt.id, before[before.length - 1].seq)
     assert.equal(updates.length, 260)
@@ -46,9 +55,11 @@ test("conversation keeps committed replies, isolates previews and resumes the sa
     assert.equal(board.events(attempt.id).find(row => row.kind === "tool")?.message, "tool-name")
     assert.deepEqual(board.conversation(active.id).replies.map(row => row.text), ["第一段回复", "第二段回复"])
     assert.equal(board.read().cards[0].runs[0].prompt, "第一条")
+    assert.deepEqual(board.read().cards[0].runs[0].usage, { tokens: 145, scope: "run" })
     board.act({ action: "run", id: active.id, from: "review", prompt: "追问", resume: true })
     assert.equal(calls[1].callbacks.session, "session-original")
     assert.equal(board.read().cards[0].runs[0].prompt, "追问")
+    assert.equal(board.read().cards[0].runs[0].usage, undefined)
   } finally {
     await board.close()
     await rm(dir, { recursive: true, force: true })
@@ -74,4 +85,56 @@ test("DSH previews accept attempt text only for the task's agent and turn", () =
   chunk(agent, "owned", "text-delta", "tial")
   emit(agent, { type: "end", attemptId: "owned" })
   assert.deepEqual(result, ["", "par", "partial", ""])
+})
+
+test("DSH reports shell commands and token usage only for the owned turn", async () => {
+  const agent = { status: "idle", session: {}, inbox: { nextTurn: [], nextStep: [] }, whenIdle() {} }
+  const events = []
+  const usage = []
+  const listeners = new Map()
+  const ctx = {
+    on(name, callback) {
+      listeners.set(name, callback)
+      return () => listeners.delete(name)
+    },
+    sessions: { async flush() {} },
+    sessionController: {
+      async resolveAgent() { return { agent } },
+      async prompt() {
+        let time = 1000
+        const emit = (type, data) => listeners.get("session/event")(agent.session, { type, data, time: time++ })
+        emit("turn/start", { turn: 3 })
+        emit("user/message", { source: { kind: "user", rpcId: "owned" } })
+        const shell = { name: "bash", arguments: '{"command":"pwd"}' }
+        emit("tool/call", { ...shell, turn: 2, callId: "foreign" })
+        emit("tool/call", { ...shell, turn: 3, callId: "shell" })
+        emit("tool/call", { name: "bash", arguments: "{bad json", turn: 3, callId: "invalid" })
+        emit("assistant/message", {
+          turn: 3,
+          message: { content: [] },
+          usage: { inputTokens: 150, outputTokens: 20, cacheReadTokens: 50, cacheWriteTokens: 10 },
+        })
+        emit("assistant/message", {
+          turn: 3,
+          message: { content: [{ type: "text", text: "完成" }] },
+          usage: { inputTokens: 120, outputTokens: 10, totalTokens: 130 },
+        })
+        emit("turn/end", { turn: 3, reason: { kind: "completed" } })
+      },
+    },
+  }
+  const result = await runDsh(ctx, {
+    executor: {}, session: "session", requestId: "owned", interruptedRequests: [],
+    signal: new AbortController().signal, onSession() {}, onPreview() {},
+    onEvent: (...event) => events.push(event),
+    onUsage: tokens => usage.push(tokens),
+  })
+  assert.deepEqual(result, { status: "succeeded", output: "完成" })
+  assert.deepEqual(events, [
+    ["status", "DSH 已接收任务", 1001],
+    ["command", "pwd", 1003],
+    ["tool", "bash\n{bad json", 1004],
+    ["output", "完成", 1006],
+  ])
+  assert.deepEqual(usage, [230, 130])
 })

@@ -13,6 +13,7 @@ export function codexArgs(session, sandbox, model) {
     throw new Error("无效的 Codex 会话编号。")
   }
   const args = ["exec", "--json", "--sandbox", sandbox, "--skip-git-repo-check"]
+  if (sandbox === "danger-full-access") args.push("-c", 'approval_policy="never"')
   if (model?.effort) args.push("-c", `model_reasoning_effort=${JSON.stringify(model.effort)}`)
   if (session) args.push("resume", "--json")
   if (model) args.push("--model", model.id)
@@ -31,6 +32,7 @@ export function runCodex({
   onSession,
   onEvent,
   onPreview,
+  onUsage,
 }) {
   const mapStopResult = reason => ({
     status: reason === "shutdown" ? "interrupted" : reason === "timeout" ? "failed" : "stopped",
@@ -115,7 +117,15 @@ export function runCodex({
         output = String(event.item.text ?? "").slice(0, 16000)
         onEvent("output", output)
       }
-      if (event.type === "turn.completed") confirmed = true
+      if (event.type === "turn.completed") {
+        confirmed = true
+        if (event.usage) {
+          const tokens = event.usage.input_tokens + event.usage.output_tokens
+          // JSONL falls back to zero if no provider usage was recorded. A resumed
+          // thread's usage includes earlier turns.
+          if (tokens > 0) onUsage(tokens, session ? "session" : "run")
+        }
+      }
       if (event.type === "turn.failed") {
         confirmed = false
         error = event.error?.message ?? "Codex 运行失败。"

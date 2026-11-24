@@ -18,7 +18,7 @@ import { Badge } from "../../shared/components/ui/badge"
 import { Button } from "../../shared/components/ui/button"
 import { EngineAvatar, EngineChip } from "../../shared/components/engine-badge"
 import { useEnvironment } from "../../shared/hooks/use-environment"
-import { ENGINES, type BoardSaveFn, type Executor } from "../../shared/types/board"
+import { ENGINES, SANDBOX_LABELS, type BoardSaveFn, type Executor } from "../../shared/types/board"
 import { ExecutorFormDialog } from "./ExecutorFormDialog"
 
 export function ExecutorsPage({
@@ -176,7 +176,7 @@ export function ExecutorsPage({
                       沙箱权限
                     </dt>
                     <dd className="min-w-0 text-foreground/90">
-                      {row.sandbox === "workspace-write" ? "可写工作区" : "只读"}
+                      {SANDBOX_LABELS[row.sandbox ?? "read-only"]}
                     </dd>
                   </div>
                 )}

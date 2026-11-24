@@ -3,6 +3,18 @@ import { followDshPreview } from "./preview.mjs"
 
 const RUN_TIMEOUT_MS = 30 * 60 * 1000
 
+function shellCommand({ name, arguments: raw }) {
+  if (name !== "bash" && name !== "pwsh") return
+  let args
+  try {
+    args = JSON.parse(raw)
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+    return
+  }
+  if (typeof args?.command === "string" && args.command.trim()) return args.command
+}
+
 function mapTurnResult(reason, output) {
   if (reason.kind === "completed") return { status: "succeeded", output }
   if (reason.kind === "aborted") return { status: "stopped", output }
@@ -31,6 +43,7 @@ export async function runDsh(ctx, {
   onSession,
   onEvent,
   onPreview,
+  onUsage,
 }) {
   const timeout = new AbortController()
   const deadline = setTimeout(() => timeout.abort("timeout"), RUN_TIMEOUT_MS)
@@ -97,22 +110,29 @@ export async function runDsh(ctx, {
 
     disposeEvents = ctx.on("session/event", (subject, event) => {
       if (subject !== agent.session || ended) return
-      const { type, data } = event
+      const { type, data, time } = event
       if (type === "turn/start") {
         currentTurn = data.turn
         if (isOwnedMessage(agent.inbox.nextTurn[0])) ownedTurn = currentTurn
       } else if (type === "user/message" && isOwnedMessage(data)) {
         ownedTurn = currentTurn
-        onEvent("status", "DSH 已接收任务")
+        onEvent("status", "DSH 已接收任务", time)
       } else if (type === "assistant/message" && ownedTurn === data.turn) {
+        const { usage } = data
+        if (usage) {
+          const promptTokens = usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+          onUsage(usage.totalTokens ?? promptTokens + usage.outputTokens)
+        }
         const text = data.message.content.filter(part => part.type === "text").map(part => part.text).join("")
         if (text) {
           output = text.slice(0, 16000)
-          onEvent("output", text)
+          onEvent("output", text, time)
         }
       } else if (type === "tool/call" && ownedTurn === data.turn) {
         toolNames.set(data.callId, data.name)
-        onEvent("tool", [data.name, data.arguments].filter(Boolean).join("\n"))
+        const command = shellCommand(data)
+        if (command) onEvent("command", command, time)
+        else onEvent("tool", [data.name, data.arguments].filter(Boolean).join("\n"), time)
       } else if (type === "tool/result" && ownedTurn === data.turn) {
         const message = data.message
         const name = toolNames.get(message?.toolCallId) ?? "工具"
@@ -125,7 +145,7 @@ export async function runDsh(ctx, {
           data.error?.reason ?? data.error?.code,
           text,
           other,
-        ].filter(Boolean).join("\n"))
+        ].filter(Boolean).join("\n"), time)
         toolNames.delete(message?.toolCallId)
       } else if (type === "turn/end" && ownedTurn === data.turn) {
         ended = true

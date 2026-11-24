@@ -9,11 +9,13 @@ import {
   DialogTitle,
 } from "../../shared/components/ui/dialog"
 import { RunStatusPill, TaskStatusPill } from "../../shared/components/status-badge"
-import { formatDuration } from "../../shared/lib/format"
 import type { RunRecord, TaskItem } from "../../shared/types/board"
 import { RunActivity } from "./RunActivity"
+import { RunMetrics } from "./RunMetrics"
+import { useRunEvents } from "./useRunEvents"
 
 function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id: string) => void }) {
+  const activity = useRunEvents(run)
   return (
     <div className="settings-card-surface grid gap-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -29,8 +31,8 @@ function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id:
         <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
           <Clock className="size-3" aria-hidden="true" />
           {new Date(run.started).toLocaleString()}
-          {run.finished ? ` (${formatDuration(run.started, run.finished)})` : ""}
         </span>
+        <RunMetrics run={run} />
       </div>
 
       <p className="line-clamp-2 rounded-lg bg-[var(--board-lane)] px-2.5 py-1.5 text-xs text-muted-foreground">
@@ -53,7 +55,7 @@ function RunRecordCard({ run, openSession }: { run: RunRecord; openSession: (id:
         )}
       </div>
 
-      <RunActivity run={run} includeReplies />
+      <RunActivity run={run} {...activity} />
       {run.error && (
         <Alert variant="destructive">
           <AlertDescription>{run.error}</AlertDescription>

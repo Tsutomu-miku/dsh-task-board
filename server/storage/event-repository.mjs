@@ -10,9 +10,9 @@ export function createEventRepository(db) {
   const deleteByRun = db.prepare("DELETE FROM run_events WHERE run_id = ?")
 
   return {
-    add(runId, kind, message) {
+    add(runId, kind, message, at = Date.now()) {
       const text = String(message ?? "")
-      insertOne.run(runId, Date.now(), kind, text.length > MAX_EVENT_MESSAGE_LENGTH
+      insertOne.run(runId, at, kind, text.length > MAX_EVENT_MESSAGE_LENGTH
         ? `${text.slice(0, MAX_EVENT_MESSAGE_LENGTH)}\n…（单条事件过长，已截断）`
         : text)
     },

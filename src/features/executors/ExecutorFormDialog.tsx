@@ -15,7 +15,7 @@ import { Label } from "../../shared/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
 import { ModelPicker } from "../../shared/components/model-picker"
 import { useEnvironment } from "../../shared/hooks/use-environment"
-import type { BoardSaveFn, Engine, Executor, ModelSelection, SandboxMode } from "../../shared/types/board"
+import { SANDBOX_LABELS, type BoardSaveFn, type Engine, type Executor, type ModelSelection, type SandboxMode } from "../../shared/types/board"
 
 export function ExecutorFormDialog({
   existing,
@@ -170,6 +170,7 @@ export function ExecutorFormDialog({
                 <SelectContent>
                   <SelectItem value="read-only">只读（安全审查，禁止修改文件）</SelectItem>
                   <SelectItem value="workspace-write">可写工作区（允许编辑目录内文件）</SelectItem>
+                  <SelectItem value="danger-full-access">{SANDBOX_LABELS["danger-full-access"]}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

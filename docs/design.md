@@ -43,8 +43,9 @@
 
 ## 数据兼容与验证
 
-- 沿用既有 SQLite 表结构。执行过程从 `run_events` 按顺序读取，活动运行仅请求上次序号之后的事件。新版本保留每次运行的全部事件行，单条过长的文本会标明截断。历史记录以原来保存的内容为准。
-- 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。
+- 沿用既有 SQLite 表结构。活动运行按事件序号增量读取日志，展开后按事件时间从早到晚显示，时间相同时按序号排列。日志包含执行中穿插的回复，过长的事件文本会标明截断。
+- 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码、工具结果和任务计划来自 CLI 的 JSON 事件。会话在运行中展示最新一条命令。
+- 平均 TPM 以本次运行收到的 token 用量除以执行时长（分钟）。DSH 汇总当前运行已提交的模型步骤。Codex CLI 在完成时报告用量，续跑时展示会话累计用量。
 - 看板会话通过 `src/styles/conversation.css` 使用 DSH 原生主题变量。用户消息使用 DSH 气泡底色，执行过程采用原生会话的细分隔和单列步骤，输入框使用 DSH 的柔和阴影与圆角。执行步骤默认折叠，标题保留运行状态和事件数，展开即可查看实时明细。 [原生消息样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/MessageItem.module.css) · [原生执行过程样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/TurnProcessNodeView.module.css) · [原生输入区样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css)
 - 验证流程：
 

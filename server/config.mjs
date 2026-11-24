@@ -4,7 +4,7 @@ import { release } from "node:os"
 import { isAbsolute } from "node:path"
 import { BoardError } from "./errors.mjs"
 
-export const VALID_SANDBOXES = new Set(["read-only", "workspace-write"])
+export const VALID_SANDBOXES = new Set(["read-only", "workspace-write", "danger-full-access"])
 export const WORKSPACE_HOST = process.platform === "linux" && /microsoft/i.test(release()) ? "wsl" : "local"
 
 export function resolveWorkspace(value) {

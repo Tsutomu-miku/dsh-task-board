@@ -15,7 +15,7 @@ export function reportCodexActivity({ type, item }, emit, commandOutput) {
   const resultKind = failed ? "error" : "tool_result"
   switch (item.type) {
     case "command_execution": {
-      if (started) emit("tool", `执行命令\n${item.command}`)
+      if (started) emit("command", item.command)
       else {
         const full = item.aggregated_output ?? ""
         const previous = commandOutput.get(item.id) ?? ""
