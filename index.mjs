@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { join } from "node:path"
 import { parsePluginConfig, resolveWorkspace } from "./server/config.mjs"
 import { BOARD_CONTEXT_TOOLS } from "./server/domain/board-context.mjs"
@@ -16,7 +17,15 @@ export function apply(ctx, config = {}) {
     throw new Error("dsh-task-board requires Linux, macOS or WSL")
   }
 
-  const css = readFileSync(new URL("./dist/styles.css", import.meta.url))
+  const cssFile = fileURLToPath(new URL("./dist/styles.css", import.meta.url))
+  const clientFile = fileURLToPath(new URL("./dist/client.js", import.meta.url))
+  const missing = [cssFile, clientFile].filter(file => !existsSync(file))
+  if (missing.length > 0) {
+    throw new Error(
+      `dsh-task-board 缺少构建产物：${missing.join("、")}。请在插件源码目录运行 npm run build 后重新安装。`
+    )
+  }
+  const css = readFileSync(cssFile)
   const { workdir, codexSandbox } = parsePluginConfig(config, ctx.profileContext.cwd)
   const dataDir = join(ctx.profileContext.dir, "task-board")
   mkdirSync(dataDir, { recursive: true, mode: 0o700 })

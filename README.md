@@ -6,6 +6,16 @@
 
 准备好 Node.js 24.9 或更新版本，以及 pnpm。下文使用已在 macOS 上验证的 DSH `0.2.2-rc.5`。插件支持 macOS、Linux 和 WSL。使用 Codex 执行器时，先登录 Codex CLI，并确保启动 DSH Web 的终端能运行 `codex --version`。
 
+### 直接安装
+
+仓库里已经提交了构建好的 `dist/`，装到 profile 不需要本地构建工具链：
+
+```zsh
+dsh plugin --profile web add github:Tsutomu-miku/dsh-task-board
+```
+
+装完重启 DSH Web 即可。
+
 ### 从源码构建
 
 ```zsh
@@ -69,6 +79,7 @@ MCP 通过 stdio 读取本机 profile 的 SQLite 数据。首次启动看板创�
 
 ## 常见问题
 
+- **启动报 `ENOENT ... dist/styles.css`**。安装到的包缺少构建产物，通常是改完源码没有重新构建或没有提交 `dist/`。在源码目录运行 `npm run build`，把 `dist/` 一起提交，再重新安装。
 - **Git URL 安装提示 `Already up to date` 或「无法从依赖变更中确定安装了哪一个包」**。按上面的步骤构建并安装 `.tgz`，然后重启 DSH Web。
 - **侧边栏没有任务看板**。确认安装命令使用 `--profile web`，并重新启动该 profile。首次安装可以先运行一次 `dsh web` 确认 DSH 能正常启动。
 - **看板找不到 Codex**。在启动 DSH Web 的终端运行 `codex --version`，确认命令在 `PATH` 上。
@@ -81,5 +92,10 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+`npm run build` 生成 `dist/styles.css` 和 `dist/client.js`，两者随仓库提交：Git URL 安装不会在安装端执行构建，缺了 `dist/` 插件启动就会报 `ENOENT ... dist/styles.css`。
+
+`dist/` 仍留在 `.gitignore` 里——Tailwind 会扫描整个包目录，把已构建的 CSS 再扫一遍会让产物越滚越大。改过 `src/` 之后先 `npm run build`，再 `git add -f dist` 强制加入暂存区。
+
 
 参见 [架构与设计](docs/design.md)、[第三方 UI 许可](SHADCN-LICENSE.md) 和 [执行器图标来源与许可](docs/executor-icon-notices.md)。
