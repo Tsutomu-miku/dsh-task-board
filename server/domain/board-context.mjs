@@ -79,7 +79,6 @@ export function createBoardContext(db, replies) {
     SELECT ${fields}, json_extract(cards.data, '$.prompt') AS prompt,
       coalesce(json_extract(cards.data, '$.brief'), json_extract(cards.data, '$.prompt')) AS brief,
       json_extract(cards.data, '$.blockedReason') AS blockedReason,
-      json_extract(cards.data, '$.project') AS project,
       json_extract(run.data, '$.id') AS runId,
       json_extract(run.data, '$.status') AS runStatus,
       json_extract(run.data, '$.started') AS runStarted,

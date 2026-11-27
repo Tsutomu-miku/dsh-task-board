@@ -1,23 +1,24 @@
-import { useState } from "react"
-import { ArrowLeft, ExternalLink, FolderOpen, History, Pencil } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ArrowLeft, ExternalLink, FolderOpen, GitCompare, History, Pencil } from "lucide-react"
+import { fetchDelivery } from "../../shared/api/client"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../shared/components/ui/dialog"
+import { Textarea } from "../../shared/components/ui/textarea"
 import { Button } from "../../shared/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
 import { EngineChip } from "../../shared/components/engine-badge"
 import { TaskStatusIcon, TaskStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
-import { COLUMNS, type BoardSaveFn, type DefaultSendMode, type Executor, type QueuedMessage, type TaskItem, type TaskStatus } from "../../shared/types/board"
+import { COLUMNS, type BoardSaveFn, type DefaultSendMode, type Executor, type GitDelivery, type QueuedMessage, type TaskItem, type TaskStatus } from "../../shared/types/board"
 import { TaskFormDialog } from "../board/TaskFormDialog"
 import { ComposerBox } from "./ComposerBox"
 import { MessageStream } from "./MessageStream"
 import { RunHistoryDialog } from "./RunHistoryDialog"
-import { RunControls } from "./RunControls"
-import { TaskWorkspaceDialog } from "./TaskWorkspaceDialog"
+import { ChangesDrawer } from "./ChangesDrawer"
 import { useConversation } from "./useConversation"
 
 export function ConversationView({
   task,
-  tasks,
   executors,
   defaultWorkdir,
   workspaceHost,
@@ -27,10 +28,8 @@ export function ConversationView({
   onBack,
   save,
   openSession,
-  openTask,
 }: {
   task: TaskItem
-  tasks: TaskItem[]
   executors: Executor[]
   defaultWorkdir: string
   workspaceHost?: "wsl" | "local"
@@ -40,20 +39,35 @@ export function ConversationView({
   onBack: () => void
   save: BoardSaveFn
   openSession: (id: string) => void
-  openTask: (id: string) => void
 }) {
   const executor = executors.find(row => row.id === task.executorId)
   const { transcript, error } = useConversation(task.id, task.runs[0])
   const [showHistory, setShowHistory] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [details, setDetails] = useState<"discussion" | "delivery" | null>(null)
+  const [showChanges, setShowChanges] = useState(false)
+  const [git, setGit] = useState<GitDelivery | null>(task.runs[0]?.delivery ?? null)
+  const [blockReason, setBlockReason] = useState<string | null>(null)
   const [moveError, setMoveError] = useState("")
   const active = task.status === "running"
 
-  async function handleStatusChange(status: TaskStatus) {
+  const latest = task.runs[0]
+  const effectiveWorkdir = latest?.executor.workdir ?? executor?.workdir ?? task.workdir
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetchDelivery(task.id, true, controller.signal).then(({ git }) => setGit(git)).catch(() => {})
+    return () => controller.abort()
+  }, [task.id, effectiveWorkdir, latest?.id, latest?.status, showChanges])
+
+  async function handleStatusChange(status: TaskStatus, reason?: string) {
     setMoveError("")
+    if (status === "blocked" && reason === undefined) {
+      setBlockReason(task.blockedReason ?? "")
+      return
+    }
     try {
-      await save({ action: "move", id: task.id, from: task.status, status })
+      await save({ action: "move", id: task.id, from: task.status, status, blockedReason: reason })
+      setBlockReason(null)
     } catch (err) {
       setMoveError((err as Error).message)
     }
@@ -114,8 +128,10 @@ export function ConversationView({
               </Select>
             )}
 
-            <Button variant="outline" size="sm" onClick={() => setDetails("discussion")}>协作</Button>
-            <Button variant="outline" size="sm" onClick={() => setDetails("delivery")}>交付</Button>
+            {git && <Button variant="outline" size="sm" onClick={() => setShowChanges(true)}>
+              <GitCompare className="size-3.5" aria-hidden="true" />变更
+              <span className="rounded-full bg-secondary px-1.5 text-[11px] tabular-nums">{git.fileCount ?? git.files.length}</span>
+            </Button>}
             {(task.status === "done" || task.archived) && <Button variant="ghost" size="sm" onClick={() => {
               void save({ action: "archive", id: task.id, archived: !task.archived }).catch(err => setMoveError((err as Error).message))
             }}>{task.archived ? "恢复任务" : "归档"}</Button>}
@@ -139,10 +155,14 @@ export function ConversationView({
           </div>
         </div>
 
-        {(moveError || task.blockedReason) && (
+        {(moveError || (task.status === "blocked" && task.blockedReason)) && (
           <div className="mx-auto max-w-5xl px-4 pb-2.5 md:px-6">
             <Alert variant="destructive">
-              <AlertDescription>{moveError || task.blockedReason}</AlertDescription>
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                {moveError || task.blockedReason}
+                {task.status === "blocked" && !task.archived && <Button size="xs" variant="ghost"
+                  onClick={() => void handleStatusChange("blocked")}>编辑阻塞原因</Button>}
+              </AlertDescription>
             </Alert>
           </div>
         )}
@@ -150,14 +170,25 @@ export function ConversationView({
 
       <MessageStream task={task} executor={executor} transcript={transcript} error={error} />
 
-      {task.archived ? <div className="p-4 text-center text-sm text-muted-foreground">任务已归档</div> : <div>
-        {active && <RunControls key={transcript?.approval?.id ?? task.runs[0]?.id} task={task} canSteer={transcript?.canSteer}
-          approval={transcript?.approval} save={save} />}
-        <ComposerBox task={task} executors={executors} running={running} queue={queue} preference={defaultSendMode} save={save} />
-      </div>}
+      {task.archived ? <div className="p-4 text-center text-sm text-muted-foreground">任务已归档</div> : (
+        <ComposerBox task={task} executors={executors} running={running} canSteer={transcript?.canSteer}
+          queue={queue} preference={defaultSendMode} save={save} />
+      )}
 
-      {details && <TaskWorkspaceDialog task={task} tasks={tasks} executors={executors} save={save} close={() => setDetails(null)}
-        openTask={openTask} initialView={details} />}
+      {showChanges && <ChangesDrawer taskId={task.id} onClose={() => setShowChanges(false)} />}
+      {blockReason !== null && <Dialog open onOpenChange={open => { if (!open) setBlockReason(null) }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>标记为已阻塞</DialogTitle><DialogDescription>说明需要什么信息或操作才能继续。</DialogDescription></DialogHeader>
+          <form className="grid gap-3" onSubmit={event => {
+            event.preventDefault()
+            if (blockReason.trim()) void handleStatusChange("blocked", blockReason)
+          }}>
+            <Textarea aria-label="阻塞原因" required maxLength={2000} value={blockReason} onChange={event => setBlockReason(event.target.value)} />
+            {moveError && <p className="text-sm text-destructive">{moveError}</p>}
+            <Button type="submit" size="sm" className="justify-self-end">标记阻塞</Button>
+          </form>
+        </DialogContent>
+      </Dialog>}
 
       {showHistory && (
         <RunHistoryDialog task={task} onClose={() => setShowHistory(false)} openSession={openSession} />
@@ -166,7 +197,6 @@ export function ConversationView({
       {editing && (
         <TaskFormDialog
           existing={task}
-          tasks={tasks}
           executors={executors}
           preferredExecutorId={task.executorId}
           defaultWorkdir={defaultWorkdir}

@@ -1,7 +1,6 @@
 export const ENGINES = {
   dsh: "DSH",
   codex: "Codex",
-  command: "本机命令",
 } as const
 
 export type Engine = keyof typeof ENGINES
@@ -28,6 +27,7 @@ export type RunStatus = keyof typeof RUN_STATUS_LABELS
 
 export type DefaultSendMode = "queue" | "priority"
 export type SendMode = DefaultSendMode | "takeover"
+export type ComposerSendMode = SendMode | "steer"
 
 export interface QueuedMessage {
   id: string
@@ -61,17 +61,9 @@ export interface ModelChoice extends ModelSelection {
 
 export interface ExecutorProfile {
   instructions?: string | null
-  skills?: string[]
   agentTools?: boolean
-  env?: Record<string, string>
-  secretEnv?: string[]
-  mcpServers?: string[]
   timeoutMs?: number | null
   maxTokens?: number | null
-  approvalPolicy?: "on-request" | "never"
-  command?: string
-  args?: string[]
-  inputMode?: "arg" | "stdin"
 }
 
 export interface Executor extends ExecutorProfile {
@@ -116,16 +108,9 @@ export interface RunEvent {
   message: string
 }
 
-export interface ApprovalRequest {
-  id: string
-  kind: "approval" | "questions"
-  summary: string
-  questions?: { id: string; header?: string; question: string; options: { label: string; description?: string }[] }[]
-}
-
 export interface Transcript {
   canSteer?: boolean
-  approval?: ApprovalRequest
+  attachments?: TaskAttachment[]
   replies: { id: number; runId: string; text: string }[]
   preview: { runId: string; text: string } | null
 }
@@ -138,15 +123,8 @@ export interface StatusTransition {
 }
 
 export interface TaskMetadata {
-  parentId?: string | null
-  stage?: number
-  blockedBy?: string[]
   blockedReason?: string | null
-  priority?: number
-  labels?: string[]
-  project?: string | null
   workspaceMode?: "isolated" | "shared"
-  prUrl?: string | null
 }
 
 export interface GitDelivery {
@@ -155,34 +133,9 @@ export interface GitDelivery {
   commit: string
   baseCommit: string
   files: string[]
+  fileCount?: number
   diff?: string
   diffTruncated?: boolean
-}
-
-export interface PullRequest {
-  status: string
-  mergeState: string
-  branch: string
-  commit: string
-  ci: "none" | "pending" | "success" | "failure"
-  checkedAt: number
-}
-
-export interface BoardNotification {
-  id: string
-  cardId: string
-  kind: string
-  message: string
-  at: number
-  read: boolean
-}
-
-export interface TaskComment {
-  id: string
-  parentId: string | null
-  author: string
-  text: string
-  at: number
 }
 
 export interface TaskAttachment {
@@ -193,39 +146,9 @@ export interface TaskAttachment {
   author: string
 }
 
-export interface ProjectDocument {
-  id: string
-  title: string
-  text: string
-}
-
-export type WakeupCondition = "time" | "dependencies" | "status" | "ci-success"
-
-export interface WakeupRule {
-  id: string
-  condition: WakeupCondition
-  subjectId: string | null
-  status: TaskStatus | null
-  executorId: string
-  prompt: string
-  at: number | null
-  interval: number | null
-  enabled: boolean
-  lastRunAt: number | null
-  error: string | null
-}
-
-export interface TaskDetail {
-  comments: TaskComment[]
-  attachments: TaskAttachment[]
-  documents: ProjectDocument[]
-  wakeups: WakeupRule[]
-}
-
 export interface TaskItem extends TaskMetadata {
   brief?: string
   archived?: boolean
-  pullRequest?: PullRequest | null
   id: string
   title: string
   prompt: string
@@ -248,8 +171,6 @@ export interface BoardState {
   defaultSendMode: DefaultSendMode
   queue: QueuedMessage[]
   revision: number
-  notifications: BoardNotification[]
-  unreadNotifications: number
 }
 
 export type BoardSync = { revision: number; unchanged: true } | (BoardState & { delta: boolean; removed?: string[] })
@@ -258,7 +179,7 @@ export type BoardAction =
   | ({ action: "create"; title: string; prompt: string; executorId?: string; workdir?: string; autoRun?: boolean } & TaskMetadata)
   | ({ action: "update"; id: string; from?: TaskStatus; title?: string; prompt?: string; executorId?: string; workdir?: string } & TaskMetadata)
   | { action: "delete"; id: string; from?: TaskStatus }
-  | { action: "move"; id: string; from: TaskStatus; status: TaskStatus }
+  | { action: "move"; id: string; from: TaskStatus; status: TaskStatus; blockedReason?: string }
   | { action: "run"; id: string; from: TaskStatus; prompt: string; resume?: boolean; model?: ModelSelection | null }
   | {
       action: "send"
@@ -286,17 +207,7 @@ export type BoardAction =
   | { action: "toggle-executor"; id: string; enabled: boolean }
   | { action: "set-default-executor"; id: string }
   | { action: "steer"; id: string; runId: string; prompt: string }
-  | { action: "approve"; id: string; runId: string; approvalId: string; decision: "accept" | "decline"; answer?: Record<string, string> }
   | { action: "archive"; id: string; archived: boolean }
-  | { action: "refresh-pr"; id: string }
-  | { action: "post-comment"; id: string; text: string; parentId?: string }
-  | { action: "add-attachment"; id: string; name: string; mime: string; content: string }
-  | { action: "remove-attachment" | "remove-wakeup" | "remove-document"; id: string; resourceId: string }
-  | { action: "save-document"; id: string; title: string; text: string; resourceId?: string }
-  | { action: "save-wakeup"; id: string; wakeupId?: string; condition: WakeupCondition; subjectId?: string;
-      status?: TaskStatus; executorId: string; prompt: string; at?: number; interval?: number; enabled?: boolean }
-  | { action: "read-notification"; notificationId: string }
-  | { action: "read-all-notifications" }
   | { action: "delete-executor"; id: string }
 
 export type BoardSaveFn = (input: BoardAction) => Promise<void>

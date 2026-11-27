@@ -12,7 +12,7 @@ function git(cwd, ...args) {
 }
 
 function read(cwd, ...args) {
-  try { return git(cwd, ...args).trim() } catch { return null }
+  try { return git(cwd, ...args).replace(/\r?\n$/, "") } catch { return null }
 }
 
 export function containsPath(parent, child) {
@@ -27,7 +27,9 @@ export function createWorkspaces(database) {
     const top = read(source, "rev-parse", "--show-toplevel")
     if (!top) return { path: source, lock: source }
     const repo = realpathSync(top)
-    if (card.workspaceMode === "shared" || legacyResume) return { path: source, lock: repo }
+    const isolated = card.workspaceMode === "isolated" ||
+      (!card.workspaceMode && card.runs?.some(attempt => attempt.delivery?.branch === `board/${card.id}`))
+    if (!isolated || legacyResume) return { path: source, lock: repo }
     const common = read(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if (!common) throw new BoardError(409, "无法识别 Git 仓库。")
     const key = createHash("sha256").update(realpathSync(common)).digest("hex").slice(0, 12)
@@ -62,14 +64,20 @@ export function createWorkspaces(database) {
 export function gitDelivery(workdir, { diff = false, baseCommit } = {}) {
   const commit = read(workdir, "rev-parse", "HEAD")
   if (!commit) return null
-  const status = read(workdir, "status", "--short", "--untracked-files=normal") ?? ""
+  const status = (read(workdir, "status", "--porcelain=v1", "-z", "--untracked-files=all") ?? "").split("\0")
   const branch = read(workdir, "symbolic-ref", "--short", "HEAD")
   const trackedBase = baseCommit && /^[a-f0-9]{40,64}$/.test(baseCommit) ? baseCommit : "HEAD"
-  const files = read(workdir, "diff", "--name-only", trackedBase) ?? ""
+  const files = new Set((read(workdir, "diff", "--name-only", "-z", trackedBase) ?? "").split("\0").filter(Boolean))
+  for (let index = 0; index < status.length; index++) {
+    const entry = status[index]
+    if (entry.length < 4) continue
+    files.add(entry.slice(3))
+    if (/[RC]/.test(entry.slice(0, 2))) index++
+  }
   const patch = diff ? read(workdir, "diff", "--no-ext-diff", "--no-color", trackedBase) : null
   return {
     workdir, branch, commit, baseCommit: trackedBase === "HEAD" ? commit : trackedBase,
-    files: [...new Set([...status.split("\n"), ...files.split("\n")].filter(Boolean))].slice(0, 100),
+    fileCount: files.size, files: [...files].slice(0, 100),
     ...(diff ? { diff: (patch ?? "").slice(0, 64_000), diffTruncated: patch === null || patch.length > 64_000 } : {}),
   }
 }

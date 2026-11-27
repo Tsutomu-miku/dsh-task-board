@@ -1,6 +1,7 @@
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
+import { endpoint } from "../../shared/api/client"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
@@ -121,6 +122,8 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
 
       <RunActivity run={run} {...activity} />
 
+      {run.handoffNote && <p className="whitespace-pre-wrap rounded-md border p-2 text-sm text-muted-foreground">{run.handoffNote}</p>}
+
       <section className="min-w-0 space-y-2.5" aria-label={`${run.executor.name} 回复`}>
         <div className="conversation-meta flex flex-wrap items-center gap-2">
           <EngineIcon engine={run.executor.engine} className="size-4 drop-shadow-sm" />
@@ -237,6 +240,15 @@ export function MessageStream({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        {Boolean(transcript?.attachments?.length) && <div className="grid gap-2 text-sm" aria-label="任务附件">
+          {transcript?.attachments?.map(file => <a key={file.id} className="w-fit max-w-full break-all text-link underline"
+            href={endpoint(`attachment?id=${file.id}`).href} download={file.name}>
+            {file.inline && <img className="max-h-44 max-w-full rounded object-contain"
+              src={endpoint(`attachment?id=${file.id}&preview=1`).href} alt={file.name} />}
+            {file.name}
+          </a>)}
+        </div>}
 
         {!task.runs.length && (
           <div className="mx-auto my-12 flex max-w-lg flex-col items-center gap-4 px-6 py-8 text-center">

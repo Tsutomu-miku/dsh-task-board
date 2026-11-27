@@ -112,7 +112,7 @@ export function ExecutorsPage({
                         <Star className="size-3 fill-current" aria-hidden="true" />
                         默认
                       </Badge>
-                    )}
+                   )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <EngineChip engine={row.engine} />
@@ -166,7 +166,7 @@ export function ExecutorsPage({
                       {environment?.presets.find(p => p.id === row.preset)?.name ?? row.preset ?? "跟随 DSH 默认"}
                     </dd>
                   </div>
-                ) : row.engine === "codex" ? (
+                ) : (
                   <div className="grid grid-cols-[5.5rem_1fr] items-start gap-2">
                     <dt className="flex items-center gap-1.5 text-muted-foreground">
                       {row.sandbox === "workspace-write" ? (
@@ -180,7 +180,7 @@ export function ExecutorsPage({
                       {SANDBOX_LABELS[row.sandbox ?? "read-only"]}
                     </dd>
                   </div>
-                ) : <dd className="break-all font-mono text-xs">{row.command} {row.args?.join(" ")}</dd>}
+                 )}
               </dl>
 
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">

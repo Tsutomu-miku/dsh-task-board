@@ -81,9 +81,6 @@ export function TaskCard({
       {card.blockedReason && <p className="line-clamp-2 break-words text-xs text-destructive">{card.blockedReason}</p>}
 
       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        {card.project && <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px]">{card.project}</span>}
-        {Boolean(card.priority) && <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px]">优先级 {card.priority}</span>}
-        {card.labels?.map(label => <span key={label} className="rounded bg-secondary px-1.5 py-0.5 text-[11px]">{label}</span>)}
         <EngineChip engine={card.engine} label={executor?.name} />
         {activeModel && (
           <span

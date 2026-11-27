@@ -77,7 +77,7 @@ export function apply(ctx, config = {}) {
         signal.throwIfAborted()
         return JSON.stringify(board.agentTool(name, args, agent))
       },
-    }, { when: ({ agent }) => board.hasAgentAccess(agent) })
+    }, { when: ({ agent }) => board.hasAgentAccess(agent, name) })
   }
 
   registerRoutes(ctx, {

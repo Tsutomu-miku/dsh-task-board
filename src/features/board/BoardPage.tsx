@@ -26,7 +26,6 @@ export function BoardPage({
   const [query, setQuery] = useState("")
   const [workspaceFilter, setWorkspaceFilter] = useState("all")
   const [executorFilter, setExecutorFilter] = useState("all")
-  const [projectFilter, setProjectFilter] = useState("all")
   const [archived, setArchived] = useState(false)
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban")
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null)
@@ -42,19 +41,16 @@ export function BoardPage({
     const keyword = query.trim().toLowerCase()
     return board.cards.filter(card => {
       if (Boolean(card.archived) !== archived) return false
-      if (projectFilter !== "all" && card.project !== projectFilter) return false
       if (workspaceFilter !== "all" && card.workdir !== workspaceFilter) return false
       if (executorFilter !== "all" && card.executorId !== executorFilter) return false
       if (!keyword) return true
       return (
         card.title.toLowerCase().includes(keyword) ||
         (card.brief ?? card.prompt).toLowerCase().includes(keyword) ||
-        (card.labels ?? []).some(label => label.toLowerCase().includes(keyword)) ||
         card.workdir.toLowerCase().includes(keyword)
       )
     })
-  }, [board.cards, query, workspaceFilter, executorFilter, archived, projectFilter])
-  const projects = [...new Set(board.cards.flatMap(card => card.project ? [card.project] : []))].sort()
+  }, [board.cards, query, workspaceFilter, executorFilter, archived])
 
   function handleMove(id: string, status: TaskStatus) {
     const card = board.cards.find(entry => entry.id === id)
@@ -125,12 +121,6 @@ export function BoardPage({
           </SelectContent>
         </Select>
 
-        {projects.length > 0 && <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger size="sm" aria-label="按项目筛选"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="all">全部项目</SelectItem>
-            {projects.filter(name => name !== "all").map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
-          </SelectContent>
-        </Select>}
         <Button size="sm" variant={archived ? "default" : "outline"} aria-pressed={archived} onClick={() => setArchived(!archived)}>归档</Button>
         <div className="segmented-nav ml-auto inline-flex items-center gap-0.5" role="group" aria-label="视图切换">
           <button
@@ -199,7 +189,6 @@ export function BoardPage({
       {editingTask && (
         <TaskFormDialog
           existing={editingTask}
-          tasks={board.cards}
           executors={board.executors}
           preferredExecutorId={board.defaultExecutor}
           defaultWorkdir={board.workdir}

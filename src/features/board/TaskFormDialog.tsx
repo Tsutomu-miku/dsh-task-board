@@ -17,12 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../../shared/components/ui/textarea"
 import { ENGINES, type BoardSaveFn, type Executor, type TaskItem } from "../../shared/types/board"
 
-const priorityLabels = ["普通", "略优先", "优先", "高优先", "最高优先"]
 const selectClassName = "h-9 w-full rounded-md border bg-card px-2"
 
 export function TaskFormDialog({
   existing,
-  tasks = [],
   executors,
   preferredExecutorId,
   defaultWorkdir,
@@ -31,7 +29,6 @@ export function TaskFormDialog({
   save,
 }: {
   existing?: TaskItem
-  tasks?: TaskItem[]
   executors: Executor[]
   preferredExecutorId: string | null
   defaultWorkdir: string
@@ -44,15 +41,7 @@ export function TaskFormDialog({
   const [prompt, setPrompt] = useState(existing?.brief ?? existing?.prompt ?? "")
   const [executorId, setExecutorId] = useState(existing?.executorId ?? preferredExecutorId ?? enabledExecutors[0]?.id ?? "")
   const [workdir, setWorkdir] = useState(existing?.workdir ?? "")
-  const [project, setProject] = useState(existing?.project ?? "")
-  const [labels, setLabels] = useState(existing?.labels?.join(", ") ?? "")
-  const [priority, setPriority] = useState(existing?.priority ?? 0)
-  const [parentId, setParentId] = useState(existing?.parentId ?? "")
-  const [stage, setStage] = useState(existing?.stage ?? 0)
-  const [blockedBy, setBlockedBy] = useState(existing?.blockedBy ?? [])
-  const [blockedReason, setBlockedReason] = useState(existing?.blockedReason ?? "")
-  const [workspaceMode, setWorkspaceMode] = useState(existing?.workspaceMode ?? "isolated")
-  const [prUrl, setPrUrl] = useState(existing?.prUrl ?? "")
+  const [workspaceMode, setWorkspaceMode] = useState(existing?.workspaceMode ?? (existing?.runs.some(run => run.delivery?.branch === `board/${existing.id}`) ? "isolated" : "shared"))
   const [autoRun, setAutoRun] = useState(false)
   const [showOptions, setShowOptions] = useState(Boolean(existing))
   const [busy, setBusy] = useState(false)
@@ -61,8 +50,6 @@ export function TaskFormDialog({
 
   const chosen = executors.find(row => row.id === executorId && row.enabled)
   const inheritedDir = chosen?.workdir ?? defaultWorkdir
-  const otherTasks = tasks.filter(task => task.id !== existing?.id)
-  const showBlockedReason = existing?.status === "blocked" || Boolean(existing?.blockedReason)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -70,17 +57,6 @@ export function TaskFormDialog({
     setBusy(true)
     setError("")
     try {
-      const metadata = {
-        project: project.trim() || null,
-        labels: labels.split(/[,，]/).map(label => label.trim()).filter(Boolean),
-        priority,
-        parentId: parentId || null,
-        stage: parentId ? stage : 0,
-        blockedBy,
-        ...(showBlockedReason ? { blockedReason: blockedReason.trim() || null } : {}),
-        workspaceMode,
-        prUrl: prUrl.trim() || null,
-      }
       if (existing) {
         await save({
           action: "update",
@@ -90,7 +66,7 @@ export function TaskFormDialog({
           prompt,
           ...(chosen ? { executorId: chosen.id } : {}),
           workdir: workdir.trim(),
-          ...metadata,
+          workspaceMode,
         })
       } else {
         await save({
@@ -100,7 +76,7 @@ export function TaskFormDialog({
           executorId,
           autoRun,
           ...(workdir.trim() ? { workdir: workdir.trim() } : {}),
-          ...metadata,
+          workspaceMode,
         })
       }
       onClose()
@@ -179,83 +155,29 @@ export function TaskFormDialog({
             <button type="button" className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm
               font-medium hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               aria-expanded={showOptions} aria-controls={optionsId} onClick={() => setShowOptions(open => !open)}>
-              <span>更多选项 <span className="font-normal text-muted-foreground">（可选）</span></span>
+              <span>运行设置 <span className="font-normal text-muted-foreground">（可选）</span></span>
               <ChevronDown className={showOptions ? "size-4 shrink-0 rotate-180" : "size-4 shrink-0"} aria-hidden="true" />
             </button>
             <div id={optionsId} hidden={!showOptions}>
               {showOptions && <div className="grid gap-4 border-t p-3">
-                <fieldset className="grid gap-2.5">
-                  <legend className="mb-2 text-sm font-medium">运行设置</legend>
-                  <div className="grid gap-1">
-                    <Label htmlFor="task-workdir">工作目录</Label>
-                    <Input id="task-workdir" placeholder={inheritedDir} value={workdir} onChange={e => setWorkdir(e.target.value)} />
-                    <p className="break-all text-xs text-muted-foreground">
-                      {chosen?.workdir ? `所选执行器固定使用 ${chosen.workdir}。` : "留空使用默认目录。"}
-                      {workspaceHost === "wsl" && "可填写 WSL 路径或已挂载的 Windows 路径。"}
-                    </p>
-                  </div>
-                  <div className="grid gap-2.5 sm:grid-cols-2">
-                    <label className="grid gap-1 text-sm">Git 项目在哪改代码
-                      <select className={selectClassName} value={workspaceMode}
-                        onChange={e => setWorkspaceMode(e.target.value as typeof workspaceMode)}>
-                        <option value="isolated">独立工作区（默认）</option>
-                        <option value="shared">原目录（可用未提交文件）</option>
-                      </select>
-                    </label>
-                    <label className="grid gap-1 text-sm">排队优先级
-                      <select className={selectClassName} value={priority} onChange={e => setPriority(Number(e.target.value))}>
-                        {priorityLabels.map((label, index) => <option key={label} value={index}>{label}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                </fieldset>
-
-                {otherTasks.length > 0 && <section className="grid gap-2.5 border-t pt-3">
-                  <h3 className="text-sm font-medium">关联任务</h3>
-                  <label className="grid gap-1 text-sm">上级任务
-                    <select className={selectClassName} value={parentId} onChange={e => setParentId(e.target.value)}>
-                      <option value="">独立任务</option>
-                      {otherTasks.map(task => <option key={task.id} value={task.id}>{task.title}</option>)}
-                    </select>
-                  </label>
-                  {parentId && <div className="grid gap-1">
-                    <Label htmlFor="task-stage">子任务顺序</Label>
-                    <Input id="task-stage" type="number" min="0" max="100" value={stage}
-                      onChange={e => setStage(Number(e.target.value))} />
-                    <p className="text-xs text-muted-foreground">数字小的先做，同一个数字的子任务可以一起运行。</p>
-                  </div>}
-                  <fieldset className="grid gap-1">
-                    <legend className="mb-1 text-sm">等哪些任务完成再开始</legend>
-                    <div className="grid max-h-40 gap-0.5 overflow-y-auto rounded-md border p-1">
-                      {otherTasks.map(task => <label key={task.id} className="flex items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent/50">
-                        <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[var(--board-brand)]"
-                          checked={blockedBy.includes(task.id)} onChange={e => {
-                            const checked = e.currentTarget.checked
-                            setBlockedBy(current => checked ? [...current, task.id] : current.filter(id => id !== task.id))
-                          }} />
-                        <span className="min-w-0 break-words">{task.title}</span>
-                      </label>)}
-                    </div>
-                  </fieldset>
-                </section>}
-
-                <section className="grid gap-2.5 border-t pt-3">
-                  <h3 className="text-sm font-medium">查找与验收</h3>
-                  <div className="grid gap-2.5 sm:grid-cols-2">
-                    <label className="grid gap-1 text-sm">所属项目
-                      <Input value={project} maxLength={80} onChange={e => setProject(e.target.value)} />
-                    </label>
-                    <label className="grid gap-1 text-sm">标签
-                      <Input value={labels} placeholder="例如：修复，前端" onChange={e => setLabels(e.target.value)} />
-                    </label>
-                  </div>
-                  <label className="grid gap-1 text-sm">关联 GitHub PR
-                    <Input value={prUrl} onChange={e => setPrUrl(e.target.value)} placeholder="粘贴已有的 PR 链接" />
-                  </label>
-                  {showBlockedReason && <label className="grid gap-1 text-sm">任务为什么暂时不能继续
-                    <Input value={blockedReason} onChange={e => setBlockedReason(e.target.value)} maxLength={2000} />
-                  </label>}
-                </section>
+                <div className="grid gap-1">
+                  <Label htmlFor="task-workdir">工作目录</Label>
+                  <Input id="task-workdir" placeholder={inheritedDir} value={workdir} onChange={e => setWorkdir(e.target.value)} />
+                  <p className="break-all text-xs text-muted-foreground">
+                    {chosen?.workdir ? `所选执行器固定使用 ${chosen.workdir}。` : "留空使用默认目录。"}
+                    {workspaceHost === "wsl" && "可填写 WSL 路径或已挂载的 Windows 路径。"}
+                  </p>
+                </div>
+                <label className="grid gap-1 text-sm">Git 工作区模式
+                  <select className={selectClassName} value={workspaceMode}
+                    onChange={event => setWorkspaceMode(event.target.value as typeof workspaceMode)}>
+                    <option value="shared">当前目录（默认）</option>
+                    <option value="isolated">独立工作树</option>
+                  </select>
+                </label>
+                {workspaceMode === "isolated" && <p className="text-xs text-muted-foreground">
+                  在独立目录和 board/ 分支中运行。可在「变更」查看改动，合回与清理可用 Git 处理。
+                </p>}
               </div>}
             </div>
           </div>

@@ -7,7 +7,7 @@ import { cn } from "../lib/utils"
 const logos = { dsh: dshLogo, codex: codexLogo }
 
 export function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
-  if (engine === "command") return <Terminal aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />
+  if (typeof logos[engine] !== "string") return <Terminal aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />
   return (
     <img src={logos[engine]} alt="" width={16} height={16} draggable={false}
       className={cn("size-3.5 shrink-0 object-contain", engine === "dsh" && "rounded-[18%] bg-white", className)}
@@ -46,7 +46,7 @@ export function EngineChip({ engine, label, className }: { engine: Engine; label
       )}
     >
       <EngineIcon engine={engine} className="size-3" />
-      <span className="truncate">{label ?? ENGINES[engine]}</span>
+      <span className="truncate">{label ?? ENGINES[engine] ?? "旧执行器"}</span>
     </span>
   )
 }

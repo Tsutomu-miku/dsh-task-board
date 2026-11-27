@@ -5,17 +5,18 @@ import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../shared/components/ui/select"
 import { Textarea } from "../../shared/components/ui/textarea"
-import { ENGINES, type BoardSaveFn, type DefaultSendMode, type Executor, type ModelSelection, type QueuedMessage, type SendMode, type TaskItem } from "../../shared/types/board"
+import { ENGINES, type BoardSaveFn, type ComposerSendMode, type DefaultSendMode, type Executor, type ModelSelection, type QueuedMessage, type TaskItem } from "../../shared/types/board"
 import { composerCopy } from "./composer-copy"
 import { ComposerModelPopover } from "./ComposerModelPopover"
 import { SendModeMenu } from "./SendModeMenu"
 
 const executorIconClass = "size-4 drop-shadow-sm"
 
-export function ComposerBox({ task, executors, running, queue, preference, save }: {
+export function ComposerBox({ task, executors, running, canSteer, queue, preference, save }: {
   task: TaskItem
   executors: Executor[]
   running?: TaskItem
+  canSteer?: boolean
   queue: QueuedMessage[]
   preference: DefaultSendMode
   save: BoardSaveFn
@@ -23,7 +24,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const waiting = queue.filter(item => item.cardId === task.id)
   const [draft, setDraft] = useState(() => task.runs.length || waiting.length ? "" : (task.brief ?? task.prompt))
   const [target, setTarget] = useState<string | null>(null)
-  const [selectedMode, setSelectedMode] = useState<{ mode: SendMode; runId: string } | null>(null)
+  const [selectedMode, setSelectedMode] = useState<{ mode: ComposerSendMode; runId: string } | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [stoppingRun, setStoppingRun] = useState<string>()
@@ -44,9 +45,13 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const resume = Boolean(previous && !freshSession)
   const inheritedModel = resume ? previous?.executor.model ?? null : executor?.model ?? null
   const taskExecutor = executors.find(item => item.id === task.executorId)
-  const override = selectedMode?.runId === runningId ? selectedMode : null
+  const allowSteer = Boolean(activeRunId && canSteer && running?.runs[0]?.executor.engine === "dsh")
+  const override = selectedMode?.runId === runningId && (selectedMode?.mode !== "steer" || allowSteer) ? selectedMode : null
   const mode = override?.mode ?? preference
-  const mention = target === null ? /^@([^\r\n]*)$/.exec(draft)?.[1]?.toLowerCase() : undefined
+  const steering = mode === "steer"
+  const displayExecutor = steering ? running?.runs[0]?.executor : executor
+  const canSend = steering ? allowSteer : Boolean(executor?.enabled)
+  const mention = !steering && target === null ? /^@([^\r\n]*)$/.exec(draft)?.[1]?.toLowerCase() : undefined
   const candidates = mention === undefined ? [] : enabled.filter(item => item.name.toLowerCase().startsWith(mention))
 
   function selectExecutor(id: string | null) {
@@ -56,7 +61,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   }
 
   function changeDraft(value: string) {
-    if (target === null && value.startsWith("@")) {
+    if (!steering && target === null && value.startsWith("@")) {
       const entered = value.slice(1).toLowerCase()
       const matches = enabled.filter(item =>
         entered.startsWith(item.name.toLowerCase()) && /^\s/.test(value.slice(item.name.length + 1)))
@@ -80,7 +85,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !draft.trim() || !executor?.enabled) return
+    if (busy || !draft.trim() || !canSend) return
     if (candidates.length) {
       pickMention(candidates[0].id)
       return
@@ -89,16 +94,20 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
     setBusy(true)
     setError("")
     try {
-      await save({
-        action: "send",
-        id: task.id,
-        executorId: executor.id,
-        prompt: submitted,
-        ...(override ? { mode: override.mode } : {}),
-        ...(override?.mode === "takeover" ? { runId: override.runId } : {}),
-        ...(freshSession ? { freshSession } : {}),
-        ...(model ? { model } : {}),
-      })
+      if (steering && activeRunId) {
+        await save({ action: "steer", id: task.id, runId: activeRunId, prompt: submitted })
+      } else if (executor && mode !== "steer") {
+        await save({
+          action: "send",
+          id: task.id,
+          executorId: executor.id,
+          prompt: submitted,
+          ...(override ? { mode } : {}),
+          ...(override?.mode === "takeover" ? { runId: override.runId } : {}),
+          ...(freshSession ? { freshSession } : {}),
+          ...(model ? { model } : {}),
+        })
+      }
       setDraft(current => current === submitted ? "" : current)
       selectExecutor(null)
       setSelectedMode(null)
@@ -164,7 +173,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
             required
             readOnly={busy}
             aria-label={copy.message}
-            placeholder={copy.placeholder}
+            placeholder={steering ? copy.steerPlaceholder : copy.placeholder}
             className="conversation-input max-h-48 min-h-[44px] resize-none border-0 bg-transparent px-1 py-0.5 shadow-none focus-visible:ring-0"
             maxLength={16000}
             onChange={event => changeDraft(event.target.value)}
@@ -192,12 +201,12 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
           )}
 
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            <Select value={target ?? "default"} onValueChange={value => selectExecutor(value === "default" ? null : value)} disabled={busy}>
+            <Select value={target ?? "default"} onValueChange={value => selectExecutor(value === "default" ? null : value)} disabled={busy || steering}>
               <SelectTrigger size="sm" aria-label={copy.agent} className="min-w-0 max-w-full gap-1.5">
                 <span className="text-xs text-muted-foreground">{copy.executor}</span>
                 <SelectValue>
-                  {executor && <EngineIcon engine={executor.engine} className={executorIconClass} />}
-                  <span className="truncate">{executor?.name ?? copy.chooseAgent}</span>
+                  {displayExecutor && <EngineIcon engine={displayExecutor.engine} className={executorIconClass} />}
+                  <span className="truncate">{displayExecutor?.name ?? copy.chooseAgent}</span>
                 </SelectValue>
               </SelectTrigger>
               <SelectContent side="top">
@@ -218,14 +227,14 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
               </SelectContent>
             </Select>
 
-            {previous && (
+            {!steering && previous && (
               <Button type="button" size="xs" variant={freshSession ? "secondary" : "ghost"} aria-pressed={freshSession} onClick={() => setFreshSession(value => !value)}>
                 <RotateCcw className="size-3.5" aria-hidden="true" />
                 {freshSession ? copy.newSession : copy.resetSession}
               </Button>
             )}
 
-            {executor && (
+            {!steering && executor && (
               <ComposerModelPopover key={executor.id} engine={executor.engine} workdir={workdir}
                 value={model} inherited={inheritedModel} resume={resume}
                 disabled={busy || !executor.enabled} onChange={setModel}
@@ -234,7 +243,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
 
             <div className="ml-auto flex items-center gap-2">
               {runningId && (
-                <SendModeMenu mode={mode} allowTakeover={Boolean(activeRunId)} disabled={busy}
+                <SendModeMenu mode={mode} allowTakeover={Boolean(activeRunId)} allowSteer={allowSteer} disabled={busy}
                   onSelect={next => setSelectedMode(next === preference ? null : { mode: next, runId: runningId })}
                 />
               )}
@@ -247,7 +256,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
                 </button>
               )}
               <button type="submit" aria-label={sendLabel} title={sendLabel}
-                disabled={busy || !executor?.enabled}
+                disabled={busy || !canSend}
                 className="conversation-send-btn inline-flex items-center justify-center disabled:opacity-35"
               >
                 <ArrowUp className="size-[18px]" strokeWidth={2.2} aria-hidden="true" />
@@ -256,7 +265,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
           </div>
         </div>
 
-        {!executor?.enabled && <p className="px-1 text-xs text-muted-foreground">{copy.disabled}</p>}
+        {!steering && !executor?.enabled && <p className="px-1 text-xs text-muted-foreground">{copy.disabled}</p>}
         {running && running.id !== task.id && (
           <p className="px-1 text-xs text-muted-foreground">{copy.activeTask} · {running.title}</p>
         )}

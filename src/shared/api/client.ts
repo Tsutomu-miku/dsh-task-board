@@ -1,4 +1,4 @@
-import type { BoardAction, BoardSync, EnvironmentInfo, GitDelivery, PullRequest, RunEvent, TaskDetail, Transcript } from "../types/board"
+import type { BoardAction, BoardSync, EnvironmentInfo, GitDelivery, RunEvent, Transcript } from "../types/board"
 
 export function endpoint(path: string): URL {
   return new URL(`api/dsh-task-board/${path}`, document.baseURI)
@@ -17,14 +17,10 @@ export function fetchBoardState(after: number, signal?: AbortSignal): Promise<Bo
   return request<BoardSync>(after ? `state?after=${after}` : "state", { signal })
 }
 
-export function fetchTaskDetail(id: string, signal?: AbortSignal) {
-  return request<TaskDetail>(`task-detail?card=${id}`, { signal })
-}
-
-export function fetchDelivery(id: string, runId?: string, signal?: AbortSignal) {
+export function fetchDelivery(id: string, summary: boolean, signal?: AbortSignal) {
   const query = new URLSearchParams({ card: id })
-  if (runId) query.set("run", runId)
-  return request<{ git: GitDelivery | null; pullRequest?: PullRequest }>(`delivery?${query}`, { signal })
+  if (summary) query.set("summary", "1")
+  return request<{ git: GitDelivery | null }>(`delivery?${query}`, { signal })
 }
 
 export function postBoardAction(input: BoardAction): Promise<unknown> {
