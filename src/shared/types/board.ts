@@ -255,7 +255,7 @@ export interface BoardState {
 export type BoardSync = { revision: number; unchanged: true } | (BoardState & { delta: boolean; removed?: string[] })
 
 export type BoardAction =
-  | ({ action: "create"; title: string; prompt: string; executorId?: string; workdir?: string } & TaskMetadata)
+  | ({ action: "create"; title: string; prompt: string; executorId?: string; workdir?: string; autoRun?: boolean } & TaskMetadata)
   | ({ action: "update"; id: string; from?: TaskStatus; title?: string; prompt?: string; executorId?: string; workdir?: string } & TaskMetadata)
   | { action: "delete"; id: string; from?: TaskStatus }
   | { action: "move"; id: string; from: TaskStatus; status: TaskStatus }

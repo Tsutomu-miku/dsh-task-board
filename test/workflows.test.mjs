@@ -104,6 +104,33 @@ test("stage barriers dispatch after acceptance and reject stage-dependency cycle
   await f.finish(1)
 })
 
+test("creating with auto-run dispatches the task brief and persists queued runs across restart", async t => {
+  const f = await fixture(t)
+  const prerequisite = f.create("Preparation")
+  assert.equal(f.calls.length, 0)
+
+  const immediate = f.create("Immediate", { autoRun: true, executorId: "local-codex" })
+  assert.equal(immediate.status, "running")
+  assert.equal(f.calls[0].input.cardId, immediate.id)
+  assert.equal(f.calls[0].input.executor.id, "local-codex")
+  assert.equal(f.calls[0].input.prompt, "Immediate brief")
+  await f.finish(0)
+
+  const dependent = f.create("Dependent", { autoRun: true, blockedBy: [prerequisite.id] })
+  assert.equal(dependent.status, "todo")
+  const [pending] = f.board.read().queue
+  assert.equal(pending.cardId, dependent.id)
+  await f.restart()
+  assert.equal(f.calls.length, 1)
+  assert.equal(f.board.read().queue[0].id, pending.id)
+
+  f.board.act({ action: "move", id: prerequisite.id, from: "todo", status: "done" })
+  assert.equal(f.calls[1].input.requestId, pending.id)
+  assert.equal(f.calls[1].input.prompt, "Dependent brief")
+  assert.deepEqual(f.board.read().queue, [])
+  await f.finish(1)
+})
+
 test("DSH tools are run-scoped, can mark blocked and delegate, and share threaded comments and project documents", async t => {
   const f = await fixture(t)
   const dsh = await f.board.act({ action: "save-executor", id: "local-dsh", name: "DSH", agentTools: true })

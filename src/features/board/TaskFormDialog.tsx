@@ -50,6 +50,7 @@ export function TaskFormDialog({
   const [blockedReason, setBlockedReason] = useState(existing?.blockedReason ?? "")
   const [workspaceMode, setWorkspaceMode] = useState(existing?.workspaceMode ?? "isolated")
   const [prUrl, setPrUrl] = useState(existing?.prUrl ?? "")
+  const [autoRun, setAutoRun] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -90,6 +91,7 @@ export function TaskFormDialog({
           title,
           prompt,
           executorId,
+          autoRun,
           ...(workdir.trim() ? { workdir: workdir.trim() } : {}),
           ...metadata,
         })
@@ -208,6 +210,13 @@ export function TaskFormDialog({
               <label className="grid gap-1 text-sm sm:col-span-2">GitHub PR<Input value={prUrl} onChange={e => setPrUrl(e.target.value)} placeholder="https://github.com/owner/repo/pull/123" /></label>
             </div>
           </details>
+          {!existing && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-[var(--board-brand)]" checked={autoRun}
+                onChange={event => setAutoRun(event.target.checked)} disabled={busy} />
+              创建后自动运行
+            </label>
+          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

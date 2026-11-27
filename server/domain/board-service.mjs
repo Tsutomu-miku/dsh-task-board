@@ -136,7 +136,16 @@ export function openBoard({
         assertOpen()
         const input = assertPlainObject(raw)
         if (EXECUTOR_ACTIONS.has(input.action)) return executors.act(input)
-        if (input.action === "create") return cards.create(input)
+        if (input.action === "create") {
+          if (input.autoRun !== true) return cards.create(input)
+          const card = storage.atomic(() => {
+            const created = cards.create(input)
+            runs.send(created, { prompt: created.prompt, mode: "queue" }, { defer: true })
+            return created
+          })
+          runs.drain()
+          return cards.get(card.id)
+        }
         if (input.action === "set-default-send-mode") return runs.setDefaultMode(input.mode)
         const global = collaboration.global(input.action, input)
         if (global) return global

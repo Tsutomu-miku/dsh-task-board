@@ -206,7 +206,7 @@ export function runCodexApp({
     })
 
     async function start() {
-      await request("initialize", { clientInfo: { name: "dsh_task_board", version: "0.9.0" },
+      await request("initialize", { clientInfo: { name: "dsh_task_board", version: "0.9.1" },
         capabilities: { experimentalApi: true } })
       write({ method: "initialized" })
       const options = {
