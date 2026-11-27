@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { resolveWorkspace } from "../config.mjs"
 import { BoardError, requireText } from "../errors.mjs"
-import { editTaskMetadata } from "./task-metadata.mjs"
+import { optionalText, workspaceMode } from "./task-metadata.mjs"
 import { builtinExecutorId } from "./executors.mjs"
 
 const MOVABLE_STATUSES = new Set(["todo", "blocked", "review", "done"])
@@ -40,13 +40,13 @@ export function createCardManager({ store, executors, replies, events, queue, st
       engine: executor.engine,
       executorId: id,
       workdir: resolvedWorkdir,
+      workspaceMode: workspaceMode(input.workspaceMode ?? "shared"),
       status: "todo",
       created,
       session: null,
       runs: [],
       history: [{ from: null, to: "todo", cause: "created", at: created }],
     }
-    editTaskMetadata(card, input, () => store.list({ metadata: true }))
     store.save(card)
     return card
   }
@@ -71,15 +71,12 @@ export function createCardManager({ store, executors, replies, events, queue, st
       const executor = executors.get(card.executorId)
       card.workdir = rawWorkdir ? resolveWorkspace(rawWorkdir) : (executor.workdir ?? workdir)
     }
-    editTaskMetadata(card, input, () => store.list({ metadata: true }))
+    if (input.workspaceMode !== undefined) card.workspaceMode = workspaceMode(input.workspaceMode)
     store.save(card)
     return card
   }
 
   function remove(card, removeResources = () => {}) {
-    if (store.list({ metadata: true }).some(other => other.parentId === card.id || other.blockedBy?.includes(card.id))) {
-      throw new BoardError(409, "请先移除其他任务对子任务或依赖关系的引用。")
-    }
     const runIds = card.runs.map(run => run.id)
     storage.atomic(() => {
       removeResources()
@@ -91,9 +88,10 @@ export function createCardManager({ store, executors, replies, events, queue, st
     return { deleted: card.id }
   }
 
-  function moveManually(card, status) {
+  function moveManually(card, status, reason) {
     if (!MOVABLE_STATUSES.has(status)) throw new BoardError(400, "请选择有效的目标状态。")
     if (status !== "blocked") card.blockedReason = null
+    else if (reason !== undefined) card.blockedReason = optionalText(reason, 2000, "阻塞原因")
     return move(card, status, "manual")
   }
 

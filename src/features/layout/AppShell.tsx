@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react"
-import { Bell, Cpu, Kanban, Loader2, Plus } from "lucide-react"
+import { Cpu, Kanban, Loader2, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../shared/components/ui/dialog"
 import { useBoard } from "../../shared/hooks/use-board"
 import { BoardPortalContext } from "../../shared/hooks/use-portal"
 import { BoardPage } from "../board/BoardPage"
@@ -17,8 +16,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
   const [section, setSection] = useState<ActiveSection>("board")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [creatingTask, setCreatingTask] = useState(false)
-  const [showInbox, setShowInbox] = useState(false)
-  const [inboxError, setInboxError] = useState("")
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -32,6 +29,7 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
   const selectedTask = board?.cards.find(card => card.id === selectedTaskId) ?? null
   const runningTasks = board?.cards.filter(card => card.status === "running") ?? []
   const runningTask = runningTasks[0]
+  const blockedCount = board?.cards.filter(card => !card.archived && card.status === "blocked").length ?? 0
   const enabledExecutors = board?.executors.filter(item => item.enabled).length ?? 0
 
   return (
@@ -41,7 +39,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
           <ConversationView
             key={selectedTask.id}
             task={selectedTask}
-            tasks={board.cards}
             executors={board.executors}
             defaultWorkdir={board.workdir}
             workspaceHost={board.workspaceHost}
@@ -51,7 +48,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
             onBack={() => setSelectedTaskId(null)}
             save={save}
             openSession={openSession}
-            openTask={setSelectedTaskId}
           />
         ) : (
           <div className="board-shell">
@@ -111,9 +107,7 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
                     )}
                   </button>
                 </nav>
-                <Button variant="outline" size="sm" onClick={() => setShowInbox(true)}>
-                  <Bell className="size-3.5" aria-hidden="true" />收件箱{board?.unreadNotifications ? ` · ${board.unreadNotifications}` : ""}
-                </Button>
+                {blockedCount > 0 && <span className="text-xs font-medium text-destructive">已阻塞 · {blockedCount}</span>}
 
                 {section === "board" && (
                   <Button
@@ -168,7 +162,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
       {creatingTask && portalRoot && board && (
         <TaskFormDialog
           executors={board.executors}
-          tasks={board.cards}
           preferredExecutorId={board.defaultExecutor}
           defaultWorkdir={board.workdir}
           workspaceHost={board.workspaceHost}
@@ -176,25 +169,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
           save={save}
         />
       )}
-      {showInbox && board && <Dialog open onOpenChange={setShowInbox}>
-        <DialogContent className="max-h-[88vh] overflow-auto">
-          <DialogHeader><DialogTitle>收件箱</DialogTitle><DialogDescription>运行进展、交接、审批和唤醒通知</DialogDescription></DialogHeader>
-          {inboxError && <Alert variant="destructive"><AlertDescription>{inboxError}</AlertDescription></Alert>}
-          {board.unreadNotifications > 0 && <Button className="justify-self-end" size="xs" variant="outline" onClick={() => {
-            void save({ action: "read-all-notifications" }).catch(err => setInboxError((err as Error).message))
-          }}>全部标为已读</Button>}
-          {board.notifications.map(item => <button key={item.id} type="button"
-            className={`grid gap-1 rounded-lg border p-3 text-left text-sm ${item.read ? "" : "bg-accent"}`}
-            onClick={() => {
-              void save({ action: "read-notification", notificationId: item.id }).then(() => {
-                setSelectedTaskId(item.cardId); setShowInbox(false)
-              }).catch(err => setInboxError((err as Error).message))
-            }}>
-            <span>{item.message}</span><time className="text-xs text-muted-foreground">{new Date(item.at).toLocaleString()}</time>
-          </button>)}
-          {!board.notifications.length && <p className="text-sm text-muted-foreground">暂无通知。</p>}
-        </DialogContent>
-      </Dialog>}
     </BoardPortalContext.Provider>
   )
 }

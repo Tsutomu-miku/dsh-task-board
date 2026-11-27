@@ -7,7 +7,7 @@ import { reportCodexActivity } from "./activity.mjs"
 
 const WORKER_PATH = fileURLToPath(new URL("./worker.mjs", import.meta.url))
 
-export function codexArgs(session, sandbox, model, contextServer) {
+export function codexArgs(session, sandbox, model, contextServer, images = []) {
   if (session && !UUID_PATTERN.test(session)) {
     throw new Error("无效的 Codex 会话编号。")
   }
@@ -19,8 +19,18 @@ export function codexArgs(session, sandbox, model, contextServer) {
       "-c", `mcp_servers.dsh_task_board.command=${JSON.stringify(contextServer.command)}`,
       "-c", `mcp_servers.dsh_task_board.args=${JSON.stringify(contextServer.args)}`,
     )
+    if (contextServer.token) {
+      args.push(
+        "-c", 'mcp_servers.dsh_task_board.env_vars=["DSH_TASK_BOARD_RUN_ACCESS"]',
+        "-c", 'mcp_servers.dsh_task_board.tools.board_set_outcome.approval_mode="approve"',
+      )
+      if (contextServer.canDelegate) {
+        args.push("-c", 'mcp_servers.dsh_task_board.tools.board_delegate.approval_mode="approve"')
+      }
+    }
   }
   if (session) args.push("resume", "--json")
+  for (const image of images) args.push("--image", image)
   if (model) args.push("--model", model.id)
   if (session) args.push(session)
   return [...args, "-"]
@@ -34,6 +44,7 @@ export function runCodex({
   model,
   tempDir,
   contextServer,
+  attachments = [],
   signal,
   onSession,
   onEvent,
@@ -46,11 +57,12 @@ export function runCodex({
 
   if (signal.aborted) return Promise.resolve(mapStopResult(signal.reason))
 
-  const args = codexArgs(session, sandbox, model, contextServer)
+  const args = codexArgs(session, sandbox, model, contextServer, attachments.filter(file => file.inline).map(file => file.path))
   // Keep TMPDIR pinned inside the persistent profile directory so detached DSH Web
   // hosts can create Codex sandbox mounts even after a launcher's temp dir expires.
   mkdirSync(tempDir, { recursive: true, mode: 0o700 })
   const env = { ...process.env, TMPDIR: tempDir, TMP: tempDir, TEMP: tempDir }
+  if (contextServer?.token) env.DSH_TASK_BOARD_RUN_ACCESS = contextServer.token
 
   return new Promise(resolve => {
     const child = fork(WORKER_PATH, args, {

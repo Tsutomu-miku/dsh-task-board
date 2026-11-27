@@ -1,6 +1,6 @@
 {
   "name": "dsh-task-board",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "private": true,
   "scripts": {
     "build": "tailwindcss -i src/styles/tokens.css -o dist/styles.css --minify && node build-client.mjs",
@@ -60,6 +60,7 @@
     "dist/client.js",
     "dist/styles.css",
     "docs/design.md",
+    "docs/roadmap.md",
     "docs/executor-icon-notices.md",
     "SHADCN-LICENSE.md",
     "docs/markdown-license.txt"

@@ -40,17 +40,9 @@ export function ExecutorFormDialog({
   const [preset, setPreset] = useState(existing?.preset ?? "default")
   const [sandbox, setSandbox] = useState<SandboxMode>(existing?.sandbox ?? "read-only")
   const [instructions, setInstructions] = useState(existing?.instructions ?? "")
-  const [skills, setSkills] = useState(existing?.skills?.join("\n") ?? "")
   const [agentTools, setAgentTools] = useState(existing?.agentTools ?? false)
-  const [env, setEnv] = useState(Object.entries(existing?.env ?? {}).map(([key, value]) => `${key}=${value}`).join("\n"))
-  const [secrets, setSecrets] = useState(existing?.secretEnv?.join("\n") ?? "")
-  const [mcp, setMcp] = useState(existing?.mcpServers?.join("\n") ?? "")
   const [timeout, setTimeoutMinutes] = useState(existing?.timeoutMs ? String(existing.timeoutMs / 60_000) : "")
   const [budget, setBudget] = useState(existing?.maxTokens?.toString() ?? "")
-  const [approval, setApproval] = useState(existing?.approvalPolicy === "on-request")
-  const [command, setCommand] = useState(existing?.command ?? "")
-  const [args, setArgs] = useState(existing?.args?.join("\n") ?? "")
-  const [inputMode, setInputMode] = useState(existing?.inputMode ?? "stdin")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
 
@@ -63,12 +55,6 @@ export function ExecutorFormDialog({
     setBusy(true)
     setError("")
     try {
-      const lines = (value: string) => value.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
-      const variables = engine === "dsh" ? [] : env.split(/\r?\n/).filter(line => line.trim()).map(line => {
-        const separator = line.indexOf("=")
-        if (separator < 1) throw new Error("每个环境变量需按 NAME=value 填写。")
-        return [line.slice(0, separator).trim(), line.slice(separator + 1)]
-      })
       await save({
         action: "save-executor",
         id: existing?.id,
@@ -77,17 +63,11 @@ export function ExecutorFormDialog({
         workdir: workdir.trim(),
         preset: engine === "dsh" && preset !== "default" ? preset : null,
         sandbox: engine === "codex" ? sandbox : null,
-        model: engine === "command" ? null : model,
+        model,
         instructions: instructions.trim() || null,
-        skills: lines(skills),
-        agentTools: engine !== "command" && agentTools,
-        env: Object.fromEntries(variables),
-        secretEnv: engine === "dsh" ? [] : lines(secrets),
-        mcpServers: engine === "codex" ? lines(mcp) : [],
+        agentTools,
         timeoutMs: timeout ? Math.round(Number(timeout) * 60_000) : null,
-        maxTokens: budget && engine !== "command" ? Number(budget) : null,
-        approvalPolicy: approval ? "on-request" : "never",
-        ...(engine === "command" ? { command, args: lines(args), inputMode } : {}),
+        maxTokens: budget ? Number(budget) : null,
       })
       onClose()
     } catch (err) {
@@ -140,7 +120,6 @@ export function ExecutorFormDialog({
               <SelectContent>
                 <SelectItem value="dsh"><span className="flex items-center gap-2"><EngineAvatar engine="dsh" size="xs" />DSH（原生宿主会话）</span></SelectItem>
                 <SelectItem value="codex"><span className="flex items-center gap-2"><EngineAvatar engine="codex" size="xs" />Codex（本机 CLI）</span></SelectItem>
-                <SelectItem value="command"><span className="flex items-center gap-2"><EngineAvatar engine="command" size="xs" />本机命令（Claude Code、Gemini CLI 等）</span></SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -188,7 +167,7 @@ export function ExecutorFormDialog({
                 </SelectContent>
               </Select>
             </div>
-          ) : engine === "codex" ? (
+          ) : (
             <div className="grid gap-1.5">
               <Label htmlFor="executor-sandbox">
                 <Shield className="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -205,39 +184,23 @@ export function ExecutorFormDialog({
                 </SelectContent>
               </Select>
             </div>
-          ) : <div className="grid gap-2">
-            <label className="grid gap-1.5 text-sm">可执行程序<Input value={command} onChange={e => setCommand(e.target.value)} required placeholder="claude" /></label>
-            <label className="grid gap-1.5 text-sm">命令参数（每行一个）<Textarea value={args} onChange={e => setArgs(e.target.value)} placeholder="-p" /></label>
-            <label className="grid gap-1.5 text-sm">传递任务消息<select className="h-9 rounded-md border bg-card px-2" value={inputMode}
-              onChange={e => setInputMode(e.target.value as typeof inputMode)}>
-              <option value="stdin">标准输入</option><option value="arg">附加为最后一个参数</option>
-            </select></label>
-          </div>}
+          )}
 
-          {engine !== "command" && <ModelPicker
+          <ModelPicker
             id="executor-model"
             models={environment?.models[engine] ?? []}
             value={model}
             onChange={setModel}
             defaultLabel={`跟随 ${engine === "dsh" ? "DSH" : "Codex"} 默认模型`}
             checking={checking}
-          />}
+          />
           <details className="rounded-lg border p-3">
-            <summary className="cursor-pointer text-sm font-medium">角色、协作与运行预算</summary>
+            <summary className="cursor-pointer text-sm font-medium">角色与运行限制</summary>
             <div className="mt-3 grid gap-3">
               <label className="grid gap-1.5 text-sm">角色指令<Textarea value={instructions} maxLength={16000} onChange={e => setInstructions(e.target.value)} /></label>
-              <label className="grid gap-1.5 text-sm">已安装技能（每行一个名称）<Textarea value={skills} onChange={e => setSkills(e.target.value)} /></label>
-              {engine !== "command" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={agentTools} onChange={e => setAgentTools(e.target.checked)} />允许 Agent 自动委派与接力</label>}
-              {engine === "codex" && sandbox !== "danger-full-access" && <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={approval} onChange={e => setApproval(e.target.checked)} />允许在看板中审批 Codex 权限请求
-              </label>}
-              {engine === "codex" && <label className="grid gap-1.5 text-sm">Codex 已配置的 MCP 绑定（每行一个名称）<Textarea value={mcp} onChange={e => setMcp(e.target.value)} /></label>}
-              {engine !== "dsh" && <>
-                <label className="grid gap-1.5 text-sm">环境变量（每行 NAME=value）<Textarea value={env} onChange={e => setEnv(e.target.value)} /></label>
-                <label className="grid gap-1.5 text-sm">从宿主读取的密钥变量名（每行一个）<Textarea value={secrets} onChange={e => setSecrets(e.target.value)} /></label>
-              </>}
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={agentTools} onChange={e => setAgentTools(e.target.checked)} />允许自动交接给其他执行器</label>
               <label className="grid gap-1.5 text-sm">运行超时（分钟，留空继承）<Input type="number" min="0.017" max="1440" step="any" value={timeout} onChange={e => setTimeoutMinutes(e.target.value)} /></label>
-              {engine !== "command" && <label className="grid gap-1.5 text-sm">每轮 Token 预算（0 为不限，留空继承）<Input type="number" min="0" max="100000000" value={budget} onChange={e => setBudget(e.target.value)} /></label>}
+              <label className="grid gap-1.5 text-sm">单轮 Token 上限（0 为不限，留空继承）<Input type="number" min="0" max="100000000" value={budget} onChange={e => setBudget(e.target.value)} /></label>
             </div>
           </details>
 

@@ -4,37 +4,23 @@ import { BoardError } from "../errors.mjs"
 const tokenHash = token => createHash("sha256").update(token).digest("hex")
 
 export function createWorkflowRepository(db) {
-  const read = db.prepare("SELECT data FROM board_resources WHERE kind = ? AND id = ?")
-  const list = db.prepare("SELECT data FROM board_resources WHERE kind = ? AND scope = ? ORDER BY rowid DESC")
-  const save = db.prepare(`INSERT INTO board_resources (kind, id, scope, data) VALUES (?, ?, ?, ?)
-    ON CONFLICT(kind, id) DO UPDATE SET data = excluded.data`)
-  const remove = db.prepare("DELETE FROM board_resources WHERE kind = ? AND id = ?")
+  const read = db.prepare("SELECT data FROM board_resources WHERE kind = 'attachment' AND id = ?")
+  const list = db.prepare("SELECT data FROM board_resources WHERE kind = 'attachment' AND scope = ? ORDER BY rowid")
   const readFile = db.prepare("SELECT body FROM board_files WHERE id = ?")
-  const insertFile = db.prepare("INSERT INTO board_files (id, body) VALUES (?, ?)")
+  const deleteFiles = db.prepare("DELETE FROM board_files WHERE id IN (SELECT id FROM board_resources WHERE scope = ? AND kind = 'attachment')")
+  const deleteAttachments = db.prepare("DELETE FROM board_resources WHERE kind = 'attachment' AND scope = ?")
   const addCapability = db.prepare("INSERT INTO board_capabilities (run_id, token) VALUES (?, ?)")
   const removeCapability = db.prepare("DELETE FROM board_capabilities WHERE run_id = ?")
   const tokenExists = db.prepare("SELECT run_id FROM board_capabilities WHERE token = ?")
 
   return {
-    save(kind, scope, record) {
-      save.run(kind, record.id, scope, JSON.stringify(record))
-      return record
-    },
-    get(kind, id) {
-      const row = read.get(kind, id)
+    getAttachment(id) {
+      const row = read.get(id)
       return row ? JSON.parse(row.data) : null
     },
-    list(kind, scope = "") {
-      return list.all(kind, scope).map(row => JSON.parse(row.data))
-    },
-    remove(kind, id) { return remove.run(kind, id).changes !== 0 },
-    removeScope(scope) {
-      db.prepare("DELETE FROM board_files WHERE id IN (SELECT id FROM board_resources WHERE scope = ? AND kind = 'attachment')").run(scope)
-      db.prepare("DELETE FROM board_resources WHERE scope = ? OR (kind IN ('notification', 'wakeup') AND json_extract(data, '$.cardId') = ?)").run(scope, scope)
-    },
+    attachments(cardId) { return list.all(cardId).map(row => JSON.parse(row.data)) },
+    removeCardFiles(cardId) { deleteFiles.run(cardId); deleteAttachments.run(cardId) },
     file(id) { return readFile.get(id)?.body },
-    addFile(id, body) { insertFile.run(id, body) },
-    removeFile(id) { db.prepare("DELETE FROM board_files WHERE id = ?").run(id) },
     authorize(runId) {
       const token = randomUUID() + randomUUID()
       addCapability.run(runId, tokenHash(token))
@@ -47,9 +33,7 @@ export function createWorkflowRepository(db) {
       return runId
     },
     revoke(runId) { removeCapability.run(runId) },
-    reset() {
-      db.exec("DELETE FROM board_capabilities; DELETE FROM board_commands;")
-    },
+    reset() { db.exec("DELETE FROM board_capabilities; DELETE FROM board_commands;") },
   }
 }
 

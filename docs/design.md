@@ -16,7 +16,7 @@
 | `server/config.mjs` | 配置校验与工作目录解析（含 WSL Windows 路径 `wslpath` 兼容）。 |
 | `server/errors.mjs` | `BoardError` 与统一字段/UUID 校验函数。 |
 | `server/storage/` | SQLite WAL 生命周期、进程排他锁与 Repository（`card`、`executor`、`reply`、`event`），不感知 DSH Context。 |
-| `server/domain/` | 看板核心业务（`board-service`、`cards`、`executors`、`runs`、`models`），处理卡片 CRUD、状态流转、依赖与并发调度、重启中断恢复和旧库迁移。 |
+| `server/domain/` | 看板核心业务（`board-service`、`cards`、`executors`、`runs`、`models`），处理卡片 CRUD、状态流转、并发调度、重启中断恢复和旧库迁移。 |
 | `server/runners/` | 统一执行调度器（`index.mjs`）、缓存环境发现（`environment.mjs`），以及解耦的 `dsh/` 与 `codex/` 子适配器。 |
 | `server/http/router.mjs` | DSH 鉴权 Fetch 路由、JSON 请求校验和统一错误映射。 |
 
@@ -44,8 +44,8 @@
 ## 数据兼容与验证
 
 - 旧卡片 JSON 中的运行记录在事务中迁移至独立表。数据库版本游标让未变更的轮询只返回版本号，变更时传递修改或删除的卡片。折叠时只读取当前运行的最新命令，展开后分页读取日志。每页按事件时间从早到晚显示，时间相同时按序号排列。会话轮询只读取新回复，后台标签页暂停轮询。
-- 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码与工具结果来自 App Server 的 JSON-RPC 事件。会话在运行中展示最新一条命令。
-- 平均 TPM 以本次运行收到的 token 用量除以执行时长（分钟）。DSH 汇总当前运行已提交的模型步骤。Codex App Server 上报会话累计用量，运行预算减去本轮之前已知的会话用量。
+- 日志来自执行器的外部事件。DSH 工具名、参数和文本结果来自当前请求对应的会话事件。Codex 命令、退出码与工具结果来自本机 `codex exec --json` 的 JSONL 事件。会话在运行中展示最新一条命令。
+- 平均 TPM 以本次运行收到的 token 用量除以执行时长（分钟）。DSH 汇总当前运行已提交的模型步骤。Codex 的使用量在收到 JSONL 统计事件时入账。
 - 看板会话通过 `src/styles/conversation.css` 使用 DSH 原生主题变量。用户消息使用 DSH 气泡底色，执行过程采用原生会话的细分隔和单列步骤，输入框使用 DSH 的柔和阴影与圆角。执行步骤默认折叠，标题保留运行状态和事件数，展开即可查看实时明细。 [原生消息样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/MessageItem.module.css) · [原生执行过程样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-chat/src/client/chat/TurnProcessNodeView.module.css) · [原生输入区样式](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/client/ui-conversation/src/client/skeleton/InputBar.module.css)
 - DSH 工具与外部 stdio MCP 共用 SQLite WAL 的只读上下文查询。看板启动的 DSH 工具以当前 Agent 实例识别正在运行的卡片，Codex 由限本轮的凭证将写请求交由宿主处理。
 - 默认单轮超时一小时。可配置 `parallelism`（默认 4）、`timeoutMs`（默认 3,600,000）和 `maxTokens`（默认 0，不限），执行器可覆盖后两项。Token 预算依赖执行器上报可计量用量。宿主关闭时请求中断，并等待运行收尾。
@@ -60,8 +60,8 @@ npm pack
 
 ## 调度与数据
 
-每张卡只能同时执行一轮。不同的 Git 工作树可并行，直接运行的工作目录在路径相交时串行。旧会话继续使用已记录的目录。新的隔离任务从源仓库 HEAD 建立工作树。阶段和显式依赖在派发时校验，只有前置任务验收进入 `done` 后才开放。领取消息和创建运行同属一个 SQLite 事务。原始任务说明独立于本轮请求保存。
+每张卡同一时间只运行一轮。新卡默认直接使用当前目录。目录相交时串行，不同目录可并行。显式选择独立工作树时从仓库 HEAD 建分支。已记录的会话和工作树继续使用已有的路径。领取消息和创建运行在同一个 SQLite 事务中提交。
 
-运行记录保留执行配置快照、会话、Git 摘要和结构化交接说明。最新 Git Diff 由工作树实时计算。附件数据、讨论、项目文档、通知和唤醒规则保存在同一 profile。清理卡片不会删除 Git 工作树或分支；归档会保留数据和代码交付物。
+任务说明与本轮请求独立保存。读取旧卡片时忽略已退役的字段，已有运行、会话和历史资源保留。已保存的附件可从主时间线查看和下载。已退役的命令执行器配置留在数据库，相关卡片可改用支持的执行器。
 
-Codex 的交互运行使用本机 App Server 的 stdio JSON-RPC。DSH 纠偏使用已归属给看板的运行所对应 Agent 的下一步收件箱。条件唤醒由宿主轮询与状态变更共同评估，调度消息和更新规则在同一事务提交。
+执行器角色和看板写回提示只在同一处拼入本轮上下文。DSH 的纠偏由主输入框发给当前原生轮次。任务变更抽屉从本机 Git 按需读取，展示累计到本卡基准提交的 Diff。阶段边界与后续验收见 [路线图](roadmap.md)。

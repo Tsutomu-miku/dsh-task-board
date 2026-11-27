@@ -2,7 +2,7 @@ const copy = {
   zh: {
     locale: "zh",
     agent: "本轮执行器", executor: "执行器", followDefault: "任务默认",
-    queue: "排队", priority: "插队", takeover: "停止当前并接管",
+    steer: "纠偏", steerPlaceholder: "补充给当前这轮执行的指示", queue: "排队", priority: "插队", takeover: "停止当前并接管",
     sendMode: "发送方式", thisSend: "本次发送", defaultMode: "任务看板默认发送方式",
     defaultModeHint: "已有任务运行时，新消息按此方式等待执行。", savingMode: "正在保存…",
     queued: "等待发送", queueFailed: "派发失败",
@@ -19,7 +19,7 @@ const copy = {
   en: {
     locale: "en",
     agent: "Executor for this message", executor: "Executor", followDefault: "Task default",
-    queue: "Queue", priority: "Send next", takeover: "Stop current run and take over",
+    steer: "Steer", steerPlaceholder: "Send guidance to the current run", queue: "Queue", priority: "Send next", takeover: "Stop current run and take over",
     sendMode: "Send mode", thisSend: "This message", defaultMode: "Task Board default send mode",
     defaultModeHint: "Applies when a task is already running.", savingMode: "Saving…",
     queued: "Queued messages", queueFailed: "Could not start",

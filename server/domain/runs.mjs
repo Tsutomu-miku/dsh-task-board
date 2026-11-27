@@ -3,7 +3,6 @@ import { resolveWorkspace } from "../config.mjs"
 import { assertUuid, BoardError, requireText } from "../errors.mjs"
 import { createHandoff, taskBrief, withHandoff } from "./handoff.mjs"
 import { normalizeModel } from "./models.mjs"
-import { waitingFor } from "./task-metadata.mjs"
 import { containsPath, gitDelivery } from "./workspaces.mjs"
 
 const RESULT_LABELS = {
@@ -26,7 +25,6 @@ export function createRunManager({
       events.add(attempt.id, "status", error)
     }
     cards.move(card, "todo", "interrupted")
-    collaboration.notify(card.id, "interrupted", error)
   }
 
   function getEnabledExecutor(id) {
@@ -49,16 +47,16 @@ export function createRunManager({
     return { executor, source, workspace, legacy }
   }
 
-  function available(card, workspace, all) {
-    return !card.archived && card.status !== "running" && !waitingFor(card, all).length &&
+  function available(card, workspace) {
+    return !card.archived && card.status !== "running" &&
       jobs.size < parallelism && ![...jobs.values()].some(job =>
         job.cardId === card.id || containsPath(job.lock, workspace.lock) || containsPath(workspace.lock, job.lock))
   }
 
   function start(card, input, queued = false, planned = dispatchPlan(card, input, queued)) {
     const { executor, workspace, source, legacy } = planned
-    if (!available(card, workspace, cards.list({ metadata: true }))) {
-      throw new BoardError(409, "已有任务占用工作目录，或任务正在等待依赖、阶段或并发名额。")
+    if (!available(card, workspace)) {
+      throw new BoardError(409, "已有任务占用工作目录，或并发名额已满。")
     }
     const prompt = requireText(input.prompt, 16000, "任务说明")
     if (input.resume && !card.session) throw new BoardError(400, "这张卡片还没有可继续的会话。")
@@ -74,7 +72,7 @@ export function createRunManager({
     const model = input.model === undefined
       ? (previous ? previous.executor?.model ?? null : executor.model ?? null)
       : normalizeModel(input.model, executor.engine)
-    const { instructions, skills, env, secretEnv, mcpServers, ...publicExecutor } = executor
+    const { instructions, ...publicExecutor } = executor
     const snapshot = { ...publicExecutor, workdir, model, preset: previous?.executor ? previous.executor.preset : executor.preset }
     const interruptedRequests = session
       ? card.runs.filter(attempt => attempt.session === session && attempt.status === "interrupted").map(attempt => attempt.id)
@@ -107,7 +105,7 @@ export function createRunManager({
     job.done = execute(job, card, latest, {
       engine: executor.engine, executor: { ...executor, ...snapshot }, cardId: card.id,
       workdir, sourceWorkdir: source, session, interruptedRequests,
-      prompt: [collaboration.rolePrompt(card, executor, access), withHandoff(prompt, handoff)].filter(Boolean).join("\n\n"),
+      prompt: withHandoff(prompt, handoff), rolePrompt: collaboration.rolePrompt(card, executor),
       boardAccess: access,
       attachments: collaboration.files(card.id),
     })
@@ -116,10 +114,7 @@ export function createRunManager({
 
   function drain() {
     if (closing || jobs.size >= parallelism) return
-    const all = cards.list({ metadata: true })
-    const priorities = new Map(all.map(card => [card.id, card.priority ?? 0]))
-    const pending = queue.pending().sort((a, b) =>
-      a.mode === "queue" && b.mode === "queue" ? (priorities.get(b.cardId) ?? 0) - (priorities.get(a.cardId) ?? 0) : 0)
+    const pending = queue.pending()
     const visited = new Set()
     for (const message of pending) {
       if (jobs.size >= parallelism) break
@@ -127,14 +122,13 @@ export function createRunManager({
       try {
         const card = cards.get(message.cardId)
         visited.add(card.id)
-        if (card.archived || card.status === "running" || waitingFor(card, all).length) continue
+        if (card.archived || card.status === "running") continue
         const plan = dispatchPlan(card, message, true)
-        if (available(card, plan.workspace, all)) start(card, message, true, plan)
+        if (available(card, plan.workspace)) start(card, message, true, plan)
       } catch (error) {
         if (!(error instanceof BoardError)) throw error
         queue.fail(message.id, error.message)
         visited.delete(message.cardId)
-        collaboration.notify(message.cardId, "failed", error.message)
       }
     }
   }
@@ -175,10 +169,6 @@ export function createRunManager({
       result = await run({
         ...options, requestId: attempt.id, signal: job.controller.signal,
         onControls(controls) { job.controls = controls },
-        onApproval(approval) {
-          job.approval = approval
-          if (approval) collaboration.notify(card.id, "approval", `${card.title} 等待审批`)
-        },
         onEvent(kind, message, at) {
           if (jobs.get(card.id) !== job) return
           try {
@@ -252,8 +242,6 @@ export function createRunManager({
         if (job.outcome?.reason) attempt.handoffNote = job.outcome.reason
         cards.move(card, state, result.status)
         events.add(attempt.id, "status", attempt.error || RESULT_LABELS[result.status] || "运行结束")
-        collaboration.notify(card.id, state === "blocked" ? "blocked" : result.status,
-          `${card.title} · ${card.blockedReason ?? attempt.error ?? RESULT_LABELS[result.status] ?? result.status}`)
       })
       settled = true
     } catch (error) {
@@ -262,7 +250,7 @@ export function createRunManager({
       jobs.delete(card.id)
     }
     if (settled) {
-      try { collaboration.tickWakeups(); drain() } catch (error) {
+      try { drain() } catch (error) {
         console.error("dsh-task-board: unable to dispatch queued messages", error.code ?? error.name)
       }
     }
@@ -288,7 +276,7 @@ export function createRunManager({
     },
     controls(cardId) {
       const job = jobs.get(cardId)
-      return { ...(job?.controls?.steer ? { canSteer: true } : {}), ...(job?.approval ? { approval: job.approval } : {}) }
+      return job?.controls?.steer ? { canSteer: true } : {}
     },
     async steer(card, input) {
       const job = current(card, assertUuid(input.runId, "run ID"))
@@ -297,12 +285,6 @@ export function createRunManager({
       await job.controls.steer(message)
       events.add(job.runId, "status", `已发送纠偏：${message}`)
       return { sent: true }
-    },
-    approve(card, input) {
-      const job = current(card, assertUuid(input.runId, "run ID"))
-      if (!job.approval || job.approval.id !== input.approvalId) throw new BoardError(409, "该审批已结束。")
-      job.controls.approve(input.decision, input.answer)
-      return { answered: true }
     },
     stop(card, runId) {
       stopJob(current(card, runId))

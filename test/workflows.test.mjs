@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { DatabaseSync } from "node:sqlite"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
@@ -53,8 +54,8 @@ async function fixture(t, config = {}) {
 
 test("same-repository cards run in separate Git worktrees and preserve task brief and delivery across restart", async t => {
   const f = await fixture(t)
-  const first = f.create("First")
-  const second = f.create("Second")
+  const first = f.create("First", { workspaceMode: "isolated" })
+  const second = f.create("Second", { workspaceMode: "isolated" })
   const revision = f.board.read().revision
   f.send(first, "Follow-up on first")
   f.send(second)
@@ -70,7 +71,8 @@ test("same-repository cards run in separate Git worktrees and preserve task brie
   await f.finish(1)
   const gitInfo = f.board.delivery(first.id).git
   assert.match(gitInfo.diff, /\+first change/)
-  assert.ok(gitInfo.files.some(file => file.includes("tracked.txt")))
+  assert.deepEqual(gitInfo.files, ["tracked.txt"])
+  assert.equal(gitInfo.fileCount, 1)
   f.board.act({ action: "update", id: first.id, from: "review", title: "Retitled" })
   await f.restart()
   const diff = f.board.read(revision)
@@ -87,80 +89,86 @@ test("same-repository cards run in separate Git worktrees and preserve task brie
   assert.ok(f.board.read().cards.some(card => card.id === first.id && !card.archived))
 })
 
-test("stage barriers dispatch after acceptance and reject stage-dependency cycles", async t => {
+test("new tasks use the shared directory and ignore retired orchestration fields", async t => {
   const f = await fixture(t)
-  const parent = f.create("Parent")
-  const first = f.create("Stage one", { parentId: parent.id, stage: 1 })
-  const second = f.create("Stage two", { parentId: parent.id, stage: 2 })
-  assert.throws(() => f.board.act({ action: "update", id: first.id, blockedBy: [second.id] }), /循环/)
-  f.send(second)
-  f.send(first)
-  assert.equal(f.calls.length, 1)
-  await f.finish(0)
-  assert.equal(f.calls.length, 1)
-  f.board.act({ action: "move", id: first.id, from: "review", status: "done" })
-  assert.equal(f.calls.length, 2)
-  assert.equal(f.calls[1].input.cardId, second.id)
-  await f.finish(1)
-})
-
-test("creating with auto-run dispatches the task brief and persists queued runs across restart", async t => {
-  const f = await fixture(t)
-  const prerequisite = f.create("Preparation")
+  const original = f.create("Existing")
   assert.equal(f.calls.length, 0)
+  await writeFile(join(f.repo, "tracked.txt"), "existing edits\n")
 
-  const immediate = f.create("Immediate", { autoRun: true, executorId: "local-codex" })
-  assert.equal(immediate.status, "running")
-  assert.equal(f.calls[0].input.cardId, immediate.id)
-  assert.equal(f.calls[0].input.executor.id, "local-codex")
-  assert.equal(f.calls[0].input.prompt, "Immediate brief")
-  await f.finish(0)
+  const first = f.create("First", { autoRun: true, executorId: "local-codex" })
+  assert.equal(first.workspaceMode, "shared")
+  assert.equal(first.status, "running")
+  assert.equal(f.calls[0].input.workdir, f.repo)
+  assert.equal(f.calls[0].input.prompt, "First brief")
+  assert.equal(await readFile(join(f.calls[0].input.workdir, "tracked.txt"), "utf8"), "existing edits\n")
 
-  const dependent = f.create("Dependent", { autoRun: true, blockedBy: [prerequisite.id] })
-  assert.equal(dependent.status, "todo")
-  const [pending] = f.board.read().queue
-  assert.equal(pending.cardId, dependent.id)
+  const next = f.create("Next", { autoRun: true, blockedBy: [original.id], stage: 9, priority: 4 })
+  assert.equal(next.status, "todo")
+  assert.equal(next.blockedBy, undefined)
+  const [queued] = f.board.read().queue
+  assert.equal(queued.cardId, next.id)
+
   await f.restart()
-  assert.equal(f.calls.length, 1)
-  assert.equal(f.board.read().queue[0].id, pending.id)
-
-  f.board.act({ action: "move", id: prerequisite.id, from: "todo", status: "done" })
-  assert.equal(f.calls[1].input.requestId, pending.id)
-  assert.equal(f.calls[1].input.prompt, "Dependent brief")
+  assert.equal(f.calls[1].input.requestId, queued.id)
+  assert.equal(f.calls[1].input.prompt, "Next brief")
+  assert.equal(f.board.read().cards.find(card => card.id === original.id).status, "todo")
   assert.deepEqual(f.board.read().queue, [])
   await f.finish(1)
 })
 
-test("DSH tools are run-scoped, can mark blocked and delegate, and share threaded comments and project documents", async t => {
+test("DSH exposes scoped outcomes and delegates to an opted-in executor on the same card", async t => {
   const f = await fixture(t)
-  const dsh = await f.board.act({ action: "save-executor", id: "local-dsh", name: "DSH", agentTools: true })
+  const dsh = await f.board.act({ action: "save-executor", id: "local-dsh", name: "DSH", agentTools: true,
+    instructions: "Review carefully." })
   const codex = await f.board.act({ action: "save-executor", id: "local-codex", name: "Codex", agentTools: true })
-  const parent = f.create("Parent", { executorId: dsh.id, project: "Plugin" })
-  const thread = f.board.act({ action: "post-comment", id: parent.id, text: "Initial review" })
-  f.board.act({ action: "save-document", id: parent.id, title: "Shared", text: "Project notes" })
-  const image = f.board.act({ action: "add-attachment", id: parent.id, name: "log.txt", mime: "text/plain", content: "YWJj" })
-  assert.equal(Buffer.from(f.board.file(image.id).bytes).toString(), "abc")
-  f.send(parent)
-  assert.equal(f.calls[0].input.attachments[0].name, "log.txt")
+  const task = f.create("Work", { executorId: dsh.id })
+  f.send(task)
   const agent = {}
   f.calls[0].input.boardAccess.bindDshAgent(agent)
-  assert.throws(() => f.board.agentTool("board_read_project", {}, {}), /没有看板写权限/)
-  const context = f.board.agentTool("board_read_project", {}, agent)
-  assert.equal(context.documents[0].text, "Project notes")
-  f.board.agentTool("board_post_comment", { parentId: thread.id, text: "Agent follow-up" }, agent)
-  const handoff = f.board.agentTool("board_delegate", { title: "Review child", executorId: codex.id, prompt: "Review" }, agent)
-  assert.equal(f.calls[1].input.cardId, handoff.cardId)
-  assert.equal(f.board.read().cards.find(card => card.id === handoff.cardId).parentId, parent.id)
-  f.board.agentTool("board_set_outcome", { status: "blocked", reason: "Await review confirmation" }, agent)
+  assert.equal(f.board.hasAgentAccess(agent, "board_delegate"), true)
+  assert.equal(f.board.hasAgentAccess(agent, "board_read_project"), false)
+  assert.throws(() => f.board.agentTool("board_set_outcome", {}, {}), /没有看板写权限/)
+  assert.match(f.calls[0].input.rolePrompt, /Review carefully/)
+  assert.match(f.calls[0].input.rolePrompt, /local-codex/)
+  const handoff = f.board.agentTool("board_delegate", { executorId: codex.id, prompt: "Review" }, agent)
+  assert.equal(handoff.cardId, task.id)
+  assert.equal(f.calls.length, 1)
+  f.board.agentTool("board_set_outcome", { status: "todo", reason: "Ready for reviewer" }, agent)
   await f.finish(0)
-  await f.finish(1)
-  assert.equal(f.board.read().cards.find(card => card.id === parent.id).blockedReason, "Await review confirmation")
-  assert.equal(f.board.detail(parent.id).comments[1].parentId, thread.id)
-  assert.ok(f.board.read().notifications.some(item => item.kind === "blocked"))
+  assert.equal(f.calls[1].input.requestId, handoff.messageId)
+  assert.match(f.calls[1].input.prompt, /Ready for reviewer/)
   assert.throws(() => f.board.agentTool("board_set_outcome", {}, agent), /没有看板写权限/)
+  await f.finish(1)
 })
 
-test("Codex MCP performs a scoped write and the wakeup state survives restart", async t => {
+test("historical attachments and removed executors survive without keeping their creation features", async t => {
+  const f = await fixture(t)
+  const task = f.create("Old card")
+  const db = new DatabaseSync(join(f.profile, "task-board", "board.sqlite"))
+  const old = { id: "old-command", engine: "command", name: "Old command", enabled: true }
+  db.prepare("INSERT INTO executors VALUES (?, ?)").run(old.id, JSON.stringify(old))
+  db.prepare("UPDATE board_settings SET default_executor = ?").run(old.id)
+  db.prepare("INSERT INTO board_resources VALUES ('attachment', ?, ?, ?)").run("file", task.id, JSON.stringify({
+    id: "file", cardId: task.id, name: "log.txt", size: 3, mime: "text/plain",
+  }))
+  db.prepare("INSERT INTO board_files VALUES (?, ?)").run("file", Buffer.from("abc"))
+  db.prepare("UPDATE cards SET data = json_set(data, '$.executorId', ?, '$.engine', ?) WHERE id = ?").run(old.id, old.engine, task.id)
+  db.close()
+
+  await f.restart()
+  assert.equal(f.board.read().cards[0].executorId, old.id)
+  assert.equal(f.board.read().defaultExecutor, "local-dsh")
+  assert.equal(f.board.read().executors.some(row => row.id === old.id), false)
+  assert.equal(f.board.conversation(task.id).attachments[0].name, "log.txt")
+  assert.equal(Buffer.from(f.board.file("file").bytes).toString(), "abc")
+  assert.throws(() => f.send(task), /执行器不可用/)
+  f.board.act({ action: "update", id: task.id, executorId: "local-codex" })
+  f.send(task)
+  assert.equal(f.calls[0].input.attachments[0].name, "log.txt")
+  await f.finish(0)
+})
+
+test("Codex MCP advertises only allowed writes and preserves a blocked outcome across restart", async t => {
   const f = await fixture(t)
   const task = f.create("MCP", { executorId: "local-codex" })
   f.send(task)
@@ -172,6 +180,9 @@ test("Codex MCP performs a scoped write and the wakeup state survives restart", 
   const connection = new Client({ name: "workflow-test", version: "1.0.0" })
   await connection.connect(transport)
   try {
+    const { tools } = await connection.listTools()
+    assert.ok(tools.some(tool => tool.name === "board_set_outcome"))
+    assert.equal(tools.some(tool => tool.name === "board_delegate"), false)
     const result = await connection.callTool({
       name: "board_set_outcome", arguments: { status: "blocked", reason: "Wait for commit" },
     })
@@ -182,14 +193,8 @@ test("Codex MCP performs a scoped write and the wakeup state survives restart", 
   }
   await f.finish(0)
   assert.equal(f.board.read().cards[0].status, "blocked")
-  f.board.act({ action: "save-wakeup", id: task.id, condition: "time", executorId: "local-codex",
-    at: Date.now() - 1000, prompt: "Wake up" })
   await f.restart()
-  await delay(1200)
-  assert.equal(f.calls.length, 2)
-  assert.match(f.calls[1].input.prompt, /Wake up/)
-  assert.equal(f.board.detail(task.id).wakeups[0].enabled, false)
-  await f.finish(1)
+  assert.equal(f.board.read().cards[0].blockedReason, "Wait for commit")
 })
 
 test("dispatch enforces reported token budgets", async t => {

@@ -15,7 +15,7 @@ import { createReplyRepository } from "../storage/reply-repository.mjs"
 import { createToolCommands, createWorkflowRepository } from "../storage/workflow-repository.mjs"
 
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"))
-const { values } = parseArgs({ options: { "profile-dir": { type: "string" }, "run-access": { type: "boolean" } } })
+const { values } = parseArgs({ options: { "profile-dir": { type: "string" }, "run-access": { type: "boolean" }, "allow-delegate": { type: "boolean" } } })
 const profileDir = values["profile-dir"] ?? join(process.env.DSH_HOME || join(homedir(), ".dsh"), "profiles", "web")
 const filename = boardDatabasePath(profileDir)
 const token = values["run-access"] ? process.env.DSH_TASK_BOARD_RUN_ACCESS : undefined
@@ -25,6 +25,7 @@ database.exec("PRAGMA busy_timeout = 2000")
 const context = createBoardContext(database, createReplyRepository(database))
 if (token) createWorkflowRepository(database).runForToken(token)
 const commands = token ? createToolCommands(database) : null
+const writeTools = commands ? BOARD_RUN_TOOLS.filter(tool => tool.name !== "board_delegate" || values["allow-delegate"]) : []
 const server = new Server({ name: manifest.name, version: manifest.version }, { capabilities: { tools: {} } })
 const closed = new AbortController()
 server.onclose = () => { closed.abort(); database.close() }
@@ -32,14 +33,12 @@ server.onclose = () => { closed.abort(); database.close() }
 server.setRequestHandler(ListToolsRequestSchema, () => ({
   tools: [
     ...BOARD_CONTEXT_TOOLS.map(tool => ({ ...tool, annotations: { readOnlyHint: true, openWorldHint: false } })),
-    ...(commands ? BOARD_RUN_TOOLS.map(tool => ({
-      ...tool, annotations: { readOnlyHint: tool.name === "board_read_project", openWorldHint: false },
-    })) : []),
+    ...writeTools.map(tool => ({ ...tool, annotations: { readOnlyHint: false, openWorldHint: false } })),
   ],
 }))
 
 async function invoke(name, args, signal) {
-  if (!commands || !BOARD_RUN_TOOLS.some(tool => tool.name === name)) return context.call(name, args)
+  if (!commands || !writeTools.some(tool => tool.name === name)) return context.call(name, args)
   const id = commands.submit(token, name, args ?? {})
   const deadline = AbortSignal.any([signal, closed.signal, AbortSignal.timeout(10_000)])
   try {

@@ -1,26 +1,20 @@
 import { randomUUID } from "node:crypto"
 import { resolveWorkspace, VALID_SANDBOXES } from "../config.mjs"
-import { assertPlainObject, BoardError, requireText } from "../errors.mjs"
+import { BoardError, requireText } from "../errors.mjs"
 import { boundedNumber, optionalText } from "./task-metadata.mjs"
 import { normalizeModel, sameModel, validateModel } from "./models.mjs"
 
-export const BUILTIN_ENGINES = { dsh: "DSH", codex: "Codex", command: "本机命令" }
+export const BUILTIN_ENGINES = { dsh: "DSH", codex: "Codex" }
 export const EXECUTOR_ACTIONS = new Set(["save-executor", "toggle-executor", "set-default-executor", "delete-executor"])
 
-function stringList(value, label, limit) {
-  if (value === undefined) return []
-  if (!Array.isArray(value) || value.length > 40) throw new BoardError(400, `${label}最多 40 项。`)
-  return value.map(item => requireText(item, limit, label))
+function supported(executor) {
+  return executor && Object.hasOwn(BUILTIN_ENGINES, executor.engine)
 }
 
-function stringMap(value, label) {
-  if (value === undefined) return {}
-  const entries = Object.entries(assertPlainObject(value))
-  if (entries.length > 40 || entries.some(([key, item]) =>
-    !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof item !== "string" || item.includes("\0") || item.length > 4000)) {
-    throw new BoardError(400, `${label}格式无效。`)
-  }
-  return Object.fromEntries(entries)
+function publicExecutor({
+  id, engine, name, enabled, workdir, preset, model, sandbox, instructions, agentTools, timeoutMs, maxTokens,
+}) {
+  return { id, engine, name, enabled, workdir, preset, model, sandbox, instructions, agentTools, timeoutMs, maxTokens }
 }
 
 export function builtinExecutorId(engine) {
@@ -30,9 +24,11 @@ export function builtinExecutorId(engine) {
 export function createExecutorManager({ store, codexSandbox, atomic, presets, models, workdir, inUse }) {
   function get(id) {
     const executor = typeof id === "string" ? store.get(id) : null
-    if (!executor) throw new BoardError(404, "找不到这个执行器。")
-    return executor
+    if (!supported(executor)) throw new BoardError(404, "此执行器不可用，请选择 DSH 或 Codex。")
+    return publicExecutor(executor)
   }
+
+  const list = () => store.list().filter(supported).map(publicExecutor)
 
   function seed() {
     for (const engine of ["dsh", "codex"]) {
@@ -51,6 +47,8 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
         })
       }
     }
+    const defaultId = store.defaultId()
+    if (defaultId && !supported(store.get(defaultId))) store.setDefault(list().find(item => item.enabled)?.id ?? null)
   }
 
   function buildDraft(input, existing) {
@@ -69,11 +67,6 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
 
     const rawWorkdir = typeof input.workdir === "string" ? input.workdir.trim() : ""
     const profile = { ...existing, ...input }
-    const env = stringMap(profile.env, "环境变量")
-    const secretEnv = stringList(profile.secretEnv, "密钥环境变量", 100)
-    if (secretEnv.some(key => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) throw new BoardError(400, "密钥变量名无效。")
-    const mcpServers = stringList(profile.mcpServers, "MCP 绑定", 100)
-    if (mcpServers.some(name => !/^[A-Za-z0-9_-]+$/.test(name) || name === "dsh_task_board")) throw new BoardError(400, "MCP 名称无效或为看板保留。")
     return {
       id: existing?.id ?? randomUUID(),
       engine,
@@ -83,24 +76,15 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
       preset: engine === "dsh" && input.preset ? requireText(input.preset, 120, "DSH 预设") : null,
       sandbox,
       instructions: profile.instructions == null ? null : optionalText(profile.instructions, 16000, "角色指令"),
-      skills: stringList(profile.skills, "技能", 200),
       agentTools: profile.agentTools === true,
-      env: engine === "dsh" ? {} : env, secretEnv: engine === "dsh" ? [] : secretEnv,
-      mcpServers: engine === "codex" ? mcpServers : [],
       timeoutMs: profile.timeoutMs == null ? null : boundedNumber(profile.timeoutMs, 1000, 86_400_000, "超时"),
       maxTokens: profile.maxTokens == null ? null : boundedNumber(profile.maxTokens, 0, 100_000_000, "Token 预算"),
-      approvalPolicy: engine === "codex" && sandbox !== "danger-full-access" && profile.approvalPolicy === "on-request" ? "on-request" : "never",
-      ...(engine === "command" ? {
-        command: requireText(profile.command, 512, "可执行程序"),
-        args: stringList(profile.args, "命令参数", 1024),
-        inputMode: profile.inputMode === "arg" ? "arg" : "stdin",
-      } : {}),
       model: input.model === undefined ? existing?.model ?? null : normalizeModel(input.model, engine),
     }
   }
 
   function persist(executor) {
-    store.save(executor)
+    store.save({ ...store.get(executor.id), ...executor })
     if (executor.enabled && store.defaultId() === null) {
       store.setDefault(executor.id)
     }
@@ -112,10 +96,10 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
       throw new BoardError(400, "无效的执行器操作。")
     }
     executor.enabled = enabled
-    store.save(executor)
+    store.save({ ...store.get(executor.id), ...executor })
     const preferred = store.defaultId()
     if (!enabled && preferred === executor.id) {
-      store.setDefault(store.list().find(item => item.enabled)?.id ?? null)
+      store.setDefault(list().find(item => item.enabled)?.id ?? null)
     }
     if (enabled && preferred === null) {
       store.setDefault(executor.id)
@@ -154,7 +138,7 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
         if (["local-dsh", "local-codex"].includes(executor.id)) throw new BoardError(409, "内置执行器可以停用。")
         if (inUse(executor.id)) throw new BoardError(409, "该执行器仍被任务或队列引用。")
         store.remove(executor.id)
-        if (store.defaultId() === executor.id) store.setDefault(store.list().find(item => item.enabled)?.id ?? null)
+        if (store.defaultId() === executor.id) store.setDefault(list().find(item => item.enabled)?.id ?? null)
         return { deleted: executor.id }
       }
       return toggle(get(input.id), input.enabled)
@@ -165,7 +149,8 @@ export function createExecutorManager({ store, codexSandbox, atomic, presets, mo
     get,
     seed,
     act,
-    list: store.list,
+    list,
+    workdirFor(id) { return store.get(id)?.workdir ?? null },
     defaultId: store.defaultId,
   }
 }

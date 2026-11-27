@@ -19,8 +19,6 @@ export function createHandoff(card, previous, replies) {
       workdir: source.delivery.workdir, branch: source.delivery.branch, commit: source.delivery.commit,
       files: source.delivery.files.slice(0, 30),
     } } : {}),
-    ...(card.project ? { project: card.project } : {}),
-    ...(card.prUrl ? { pullRequest: card.prUrl } : {}),
     turns: [],
   }
   let remaining = HANDOFF_BYTES - Buffer.byteLength(JSON.stringify(context))

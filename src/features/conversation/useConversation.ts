@@ -24,12 +24,12 @@ export function useConversation(cardId: string, latestRun: RunRecord | undefined
           if (!previous) return next
           if (!next.replies.length && previous.preview?.runId === next.preview?.runId &&
               previous.preview?.text === next.preview?.text && previous.canSteer === next.canSteer &&
-              previous.approval?.id === next.approval?.id) return previous
+              !next.attachments?.length) return previous
           return {
             replies: next.replies.length ? [...previous.replies, ...next.replies] : previous.replies,
             preview: next.preview,
             canSteer: next.canSteer,
-            approval: next.approval,
+            attachments: next.attachments ?? previous.attachments,
           }
         })
         setError("")
