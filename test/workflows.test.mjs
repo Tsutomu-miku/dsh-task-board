@@ -7,6 +7,7 @@ import { join } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { test } from "node:test"
 import { openBoard } from "../server/domain/board-service.mjs"
+import { callRunCallback, RUN_PORT_ENV, RUN_TOKEN_ENV } from "../server/domain/run-callback.mjs"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { fileURLToPath } from "node:url"
@@ -224,7 +225,7 @@ test("historical attachments and removed executors survive without keeping their
   assert.throws(() => f.send(task), /执行器不可用/)
   f.board.act({ action: "update", id: task.id, executorId: "local-codex" })
   f.send(task)
-  assert.equal(f.calls[0].input.attachments[0].name, "log.txt")
+  assert.deepEqual(f.calls[0].input.attachments, [])
   await f.finish(0)
 })
 
@@ -232,10 +233,15 @@ test("Codex MCP advertises only allowed writes and preserves a blocked outcome a
   const f = await fixture(t)
   const task = f.create("MCP", { executorId: "local-codex" })
   f.send(task)
+  const { token, port: ready } = f.calls[0].input.boardAccess
+  const port = await ready
+  const invoke = (key, name, args) => callRunCallback(port, key, name, args, AbortSignal.timeout(2000))
+  await assert.rejects(invoke("0".repeat(64), "board_set_outcome", { status: "review", reason: "Invalid token" }), /授权已失效/)
+  await assert.rejects(invoke(token, "board_delegate", { executorId: "local-dsh", prompt: "Disallowed" }), /尚未启用/)
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [fileURLToPath(new URL("../server/mcp/main.mjs", import.meta.url)), "--profile-dir", f.profile, "--run-access"],
-    env: { DSH_TASK_BOARD_RUN_ACCESS: f.calls[0].input.boardAccess.token },
+    env: { [RUN_TOKEN_ENV]: token, [RUN_PORT_ENV]: String(port) },
   })
   const connection = new Client({ name: "workflow-test", version: "1.0.0" })
   await connection.connect(transport)
@@ -252,9 +258,74 @@ test("Codex MCP advertises only allowed writes and preserves a blocked outcome a
     await connection.close()
   }
   await f.finish(0)
+  await assert.rejects(invoke(token, "board_set_outcome", { status: "review", reason: "Expired" }), /授权已失效/)
   assert.equal(f.board.read().cards[0].status, "blocked")
   await f.restart()
   assert.equal(f.board.read().cards[0].blockedReason, "Wait for commit")
+})
+
+test("queued attachments survive restart, stay on their message, and are deleted on cancel", async t => {
+  const f = await fixture(t)
+  const first = f.create("In progress", { autoRun: true })
+  const card = f.create("Send with attachments")
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/m1sAAAAASUVORK5CYII="
+  const attachments = [{ name: "截图.png", data: png }]
+  const send = () => f.board.act({ action: "send", id: card.id, prompt: "", attachments })
+  const canceled = send()
+  const kept = send()
+  assert.equal(f.calls.length, 1)
+  assert.equal(kept.attachments[0].inline, true)
+  assert.equal(kept.attachments[0].data, undefined)
+  f.board.act({ action: "cancel-queued", id: card.id, messageId: canceled.id })
+  assert.throws(() => f.board.file(canceled.attachments[0].id), /找不到附件/)
+  assert.ok(f.board.read().cards.some(item => item.id === first.id))
+  await f.restart()
+  const run = f.calls[1].input
+  assert.equal(run.requestId, kept.id)
+  assert.equal(Buffer.from(run.attachments[0].bytes).toString("base64"), png)
+  assert.equal(f.board.read().cards.find(item => item.id === card.id).runs[0].attachments[0].name, "截图.png")
+  assert.equal(f.board.conversation(card.id).attachments, undefined)
+  await f.finish(1)
+  f.send(card, "Next turn")
+  assert.deepEqual(f.calls[2].input.attachments, [])
+  await f.finish(2)
+  assert.deepEqual(f.board.file(kept.attachments[0].id).bytes, Uint8Array.from(Buffer.from(png, "base64")))
+  f.board.act({ action: "delete", id: card.id })
+  assert.throws(() => f.board.file(kept.attachments[0].id), /找不到附件/)
+})
+
+test("same sessions reuse their role instructions and switching executor supplies the new role", async t => {
+  const f = await fixture(t)
+  await f.board.act({ action: "save-executor", id: "local-dsh", name: "Implementer", agentTools: true, instructions: "IMPLEMENTER_ROLE" })
+  await f.board.act({ action: "save-executor", id: "local-codex", name: "Reviewer", agentTools: true, instructions: "REVIEWER_ROLE" })
+  const card = f.create("Role handoff")
+  f.send(card)
+  const first = f.calls[0].input
+  first.onSession("dsh-implementation")
+  assert.match(first.rolePrompt, /IMPLEMENTER_ROLE/)
+  await f.finish(0)
+  f.send(card, "Continue")
+  const resumed = f.calls[1].input
+  assert.equal(resumed.session, "dsh-implementation")
+  assert.doesNotMatch(resumed.rolePrompt, /IMPLEMENTER_ROLE/)
+  const agent = {}
+  resumed.boardAccess.bindDshAgent(agent)
+  const handoff = f.board.agentTool("board_delegate", { executorId: "local-codex", prompt: "Review the implementation" }, agent)
+  assert.throws(() => f.board.agentTool("board_delegate", { executorId: "local-codex", prompt: "Second handoff" }, agent), /已交接/)
+  await f.finish(1)
+  const review = f.calls[2].input
+  assert.equal(review.requestId, handoff.messageId)
+  assert.match(review.rolePrompt, /REVIEWER_ROLE/)
+  await callRunCallback(await review.boardAccess.port, review.boardAccess.token, "board_set_outcome",
+    { status: "blocked", reason: "Waiting for input" }, AbortSignal.timeout(2000))
+  await f.finish(2)
+  assert.equal(f.board.read().cards[0].status, "blocked")
+  f.send(card, "User supplied the missing input")
+  const afterReview = f.calls[3].input
+  assert.equal(afterReview.session, "dsh-implementation")
+  assert.match(afterReview.rolePrompt, /IMPLEMENTER_ROLE/)
+  await f.finish(3)
+  assert.equal(f.board.read().cards[0].status, "review")
 })
 
 test("dispatch enforces reported token budgets", async t => {

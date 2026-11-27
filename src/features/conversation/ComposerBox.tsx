@@ -1,5 +1,5 @@
 import { type FormEvent, useRef, useState } from "react"
-import { ArrowUp, RotateCcw, Square } from "lucide-react"
+import { ArrowUp, Paperclip, RotateCcw, Square, X } from "lucide-react"
 import { EngineIcon } from "../../shared/components/engine-badge"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
@@ -11,6 +11,16 @@ import { ComposerModelPopover } from "./ComposerModelPopover"
 import { SendModeMenu } from "./SendModeMenu"
 
 const executorIconClass = "size-4 drop-shadow-sm"
+const MiB = 1024 * 1024
+
+function encodeFile(file: File): Promise<{ name: string; data: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error(`无法读取 ${file.name}。`))
+    reader.onload = () => resolve({ name: file.name, data: String(reader.result).split(",")[1] })
+    reader.readAsDataURL(file)
+  })
+}
 
 export function ComposerBox({ task, executors, running, canSteer, queue, preference, save }: {
   task: TaskItem
@@ -30,7 +40,9 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
   const [stoppingRun, setStoppingRun] = useState<string>()
   const [freshSession, setFreshSession] = useState(false)
   const [model, setModel] = useState<ModelSelection | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const textarea = useRef<HTMLTextAreaElement>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
   const copy = composerCopy()
 
   const enabled = executors.filter(item => item.enabled)
@@ -83,9 +95,21 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
     textarea.current?.focus()
   }
 
+  function addFiles(incoming: File[]) {
+    if (!incoming.length || busy || steering) return
+    const all = [...files, ...incoming]
+    if (all.length > 4 || all.some(file => file.size === 0 || file.size > 4 * MiB) ||
+        all.reduce((size, file) => size + file.size, 0) > 8 * MiB) {
+      setError("每条消息最多 4 个非空附件。单个最多 4 MB，合计最多 8 MB。")
+      return
+    }
+    setError("")
+    setFiles(all)
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !draft.trim() || !canSend) return
+    if (busy || !canSend || (!draft.trim() && !files.length) || (steering && files.length)) return
     if (candidates.length) {
       pickMention(candidates[0].id)
       return
@@ -106,9 +130,11 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
           ...(override?.mode === "takeover" ? { runId: override.runId } : {}),
           ...(freshSession ? { freshSession } : {}),
           ...(model ? { model } : {}),
+          ...(files.length ? { attachments: await Promise.all(files.map(encodeFile)) } : {}),
         })
       }
       setDraft(current => current === submitted ? "" : current)
+      setFiles([])
       selectExecutor(null)
       setSelectedMode(null)
     } catch (err) {
@@ -152,7 +178,8 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
               {waiting.map(item => (
                 <li key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
                   <span className="shrink-0 text-muted-foreground">@{item.executorName}</span>
-                  <span title={item.prompt} className="min-w-0 flex-1 truncate">{item.prompt}</span>
+                  <span title={[item.prompt, ...item.attachments?.map(file => file.name) ?? []].join("\n")}
+                    className="min-w-0 flex-1 truncate">{item.prompt}{item.attachments?.length ? ` · ${item.attachments.length} 个附件` : ""}</span>
                   <span title={item.error ?? item.waitingReason} className="max-w-[45%] truncate text-muted-foreground">
                     {item.error ?? item.waitingReason ?? copy[item.mode]}
                   </span>
@@ -170,13 +197,18 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
             ref={textarea}
             name="message"
             value={draft}
-            required
+            required={!files.length}
             readOnly={busy}
             aria-label={copy.message}
             placeholder={steering ? copy.steerPlaceholder : copy.placeholder}
             className="conversation-input max-h-48 min-h-[44px] resize-none border-0 bg-transparent px-1 py-0.5 shadow-none focus-visible:ring-0"
             maxLength={16000}
             onChange={event => changeDraft(event.target.value)}
+            onPaste={event => {
+              if (steering || busy || !event.clipboardData.files.length) return
+              if (!event.clipboardData.getData("text/plain")) event.preventDefault()
+              addFiles([...event.clipboardData.files])
+            }}
             onKeyDown={event => {
               if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return
               event.preventDefault()
@@ -189,6 +221,17 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
             }}
           />
 
+          {!!files.length && <div aria-label="待发送附件" className="flex flex-wrap gap-1.5">
+            {files.map((file, index) => <div key={`${file.name}-${index}`} className="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-0.5 text-xs">
+              <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="truncate">{file.name}</span>
+              <Button type="button" size="icon-xs" variant="ghost" aria-label={`移除 ${file.name}`} disabled={busy}
+                onClick={() => setFiles(current => current.filter((_, candidate) => candidate !== index))}>
+                <X className="size-3" aria-hidden="true" />
+              </Button>
+            </div>)}
+          </div>}
+          {steering && files.length > 0 && <p className="text-xs text-muted-foreground">切换到排队、插队或接管发送附件。</p>}
           {candidates.length > 0 && (
             <div aria-label={copy.chooseAgent} role="group" className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
               {candidates.map((item, index) => (
@@ -242,6 +285,14 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
             )}
 
             <div className="ml-auto flex items-center gap-2">
+              <input ref={fileInput} type="file" multiple hidden onChange={event => {
+                addFiles(Array.from(event.currentTarget.files ?? []))
+                event.currentTarget.value = ""
+              }} />
+              <Button type="button" size="icon-sm" variant="ghost" disabled={busy || steering}
+                aria-label="添加附件" title="添加附件或直接粘贴图片" onClick={() => fileInput.current?.click()}>
+                <Paperclip className="size-4" aria-hidden="true" />
+              </Button>
               {runningId && (
                 <SendModeMenu mode={mode} allowTakeover={Boolean(activeRunId)} allowSteer={allowSteer} disabled={busy}
                   onSelect={next => setSelectedMode(next === preference ? null : { mode: next, runId: runningId })}
@@ -256,7 +307,7 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
                 </button>
               )}
               <button type="submit" aria-label={sendLabel} title={sendLabel}
-                disabled={busy || !canSend}
+                disabled={busy || !canSend || (steering && files.length > 0)}
                 className="conversation-send-btn inline-flex items-center justify-center disabled:opacity-35"
               >
                 <ArrowUp className="size-[18px]" strokeWidth={2.2} aria-hidden="true" />

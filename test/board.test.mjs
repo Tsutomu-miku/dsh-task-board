@@ -124,6 +124,7 @@ test("Codex arguments only resume the stored session", () => {
     command: "/node", args: ["/plugin/mcp.mjs", "--run-access"], token: "run-token", canDelegate: false,
   })
   assert.ok(scoped.includes('mcp_servers.dsh_task_board.tools.board_set_outcome.approval_mode="approve"'))
+  assert.ok(scoped.includes('shell_environment_policy.exclude=["DSH_TASK_BOARD_RUN_ACCESS","DSH_TASK_BOARD_RUN_PORT"]'))
   assert.ok(scoped.every(arg => !arg.includes("board_delegate") && !arg.includes("run-token")))
   assert.throws(() => codexArgs("--last", "read-only"), /无效/)
 })

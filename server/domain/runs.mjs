@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { resolveWorkspace } from "../config.mjs"
 import { assertUuid, BoardError, requireText } from "../errors.mjs"
+import { parseMessageAttachments } from "./attachments.mjs"
 import { createHandoff, taskBrief, withHandoff } from "./handoff.mjs"
 import { normalizeModel } from "./models.mjs"
 import { containsPath, gitDelivery } from "./workspaces.mjs"
@@ -100,6 +101,7 @@ export function createRunManager({
       : input.resume && card.runs.find(attempt => attempt.session === card.session && sameWorkspace(attempt))
     if (input.resume && !previous) throw new BoardError(409, "会话工作区已变更，请启动新会话。")
     const session = previous?.session ?? null
+    const includeInstructions = !session || card.runs[0]?.executor.id !== executor.id
     const model = input.model === undefined
       ? (previous ? previous.executor?.model ?? null : executor.model ?? null)
       : normalizeModel(input.model, executor.engine)
@@ -113,6 +115,7 @@ export function createRunManager({
       id: queued ? input.id : randomUUID(),
       started: Date.now(), status: "running", prompt, output: "", error: null, session, executor: snapshot,
       sourceWorkdir: source, dispatchDepth: queued ? input.dispatchDepth ?? 0 : 0,
+      ...(input.attachments?.length && queued ? { attachments: input.attachments } : {}),
       ...(generation ? { workspaceGeneration: generation } : {}),
       ...(legacy ? { legacyWorkspace: true } : {}),
       baseCommit: gitDelivery(workdir)?.commit,
@@ -137,9 +140,9 @@ export function createRunManager({
     job.done = execute(job, card, latest, {
       engine: executor.engine, executor: { ...executor, ...snapshot }, cardId: card.id,
       workdir, sourceWorkdir: source, session, interruptedRequests,
-      prompt: withHandoff(prompt, handoff), rolePrompt: collaboration.rolePrompt(card, executor),
+      prompt: withHandoff(prompt, handoff), rolePrompt: collaboration.rolePrompt(card, executor, includeInstructions),
       boardAccess: access,
-      attachments: collaboration.files(card.id),
+      attachments: collaboration.files(latest.attachments),
     })
     return card
   }
@@ -181,13 +184,20 @@ export function createRunManager({
     }
     const executor = getEnabledExecutor(input.executorId ?? card.executorId)
     resolveWorkspace(executor.workdir ?? card.workdir)
+    const files = parseMessageAttachments(input.attachments)
+    const prompt = files.length && typeof input.prompt === "string" && !input.prompt.trim()
+      ? "请查看随这条消息发送的附件。" : requireText(input.prompt, 16000, "任务说明")
     const message = {
       id: randomUUID(), cardId: card.id, executorId: executor.id, executorName: executor.name,
-      mode, prompt: requireText(input.prompt, 16000, "任务说明"), freshSession: input.freshSession === true,
+      mode, prompt, freshSession: input.freshSession === true,
       ...(depth ? { dispatchDepth: depth } : {}),
       ...(input.model !== undefined ? { model: normalizeModel(input.model, executor.engine) } : {}),
     }
-    queue.add(message)
+    if (files.length) storage.atomic(() => {
+      message.attachments = collaboration.addMessageFiles(card.id, message.id, files)
+      queue.add(message)
+    })
+    else queue.add(message)
     if (mode === "takeover") stopJob(job)
     if (!defer) drain()
     return message
@@ -267,7 +277,6 @@ export function createRunManager({
         delivery: gitDelivery(options.workdir, { baseCommit: attempt.baseCommit }),
       })
       storage.atomic(() => {
-        collaboration.revoke(attempt.id)
         const state = job.outcome?.status === "blocked" ? "blocked"
           : result.status === "succeeded" ? job.outcome?.status ?? "review" : "todo"
         card.blockedReason = state === "blocked" ? job.outcome.reason : null
@@ -279,6 +288,7 @@ export function createRunManager({
     } catch (error) {
       console.error("dsh-task-board: unable to persist run outcome", error.code ?? error.name)
     } finally {
+      collaboration.revoke(attempt.id)
       jobs.delete(card.id)
     }
     if (settled) {

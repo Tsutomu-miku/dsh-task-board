@@ -1,13 +1,13 @@
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
-import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText } from "lucide-react"
+import { Check, Copy, Cpu, FolderOpen, GitBranch, Loader2, MessageSquareText, Paperclip } from "lucide-react"
 import { endpoint } from "../../shared/api/client"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { EngineAvatar, EngineIcon } from "../../shared/components/engine-badge"
 import { RunStatusPill } from "../../shared/components/status-badge"
 import { formatShortPath } from "../../shared/lib/format"
-import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskItem, type Transcript } from "../../shared/types/board"
+import { RUN_STATUS_LABELS, type Executor, type RunRecord, type TaskAttachment, type TaskItem, type Transcript } from "../../shared/types/board"
 import { RunActivity } from "./RunActivity"
 import { RunMetrics } from "./RunMetrics"
 import { useRunEvents } from "./useRunEvents"
@@ -78,6 +78,26 @@ function MarkdownReply({ text }: { text: string }) {
   )
 }
 
+function AttachmentLinks({ files, label }: { files: TaskAttachment[]; label: string }) {
+  if (!files.length) return null
+  return <div className="grid max-w-full gap-2" aria-label={label}>
+    {files.map(file => {
+      const query = new URLSearchParams({ id: file.id })
+      const download = endpoint(`attachment?${query}`).href
+      query.set("preview", "1")
+      return <a key={file.id} className="grid min-w-0 gap-1 rounded-lg border bg-card p-2 text-xs text-link hover:underline"
+        href={download} download={file.name} aria-label={`下载 ${file.name}`}>
+        {file.inline && <img className="max-h-48 max-w-full rounded object-contain" loading="lazy"
+          src={endpoint(`attachment?${query}`).href} alt={file.name} />}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Paperclip className="size-3 shrink-0" aria-hidden="true" />
+          <span className="break-all">{file.name}</span>
+        </span>
+      </a>
+    })}
+  </div>
+}
+
 function RunMessage({ run, replies, preview, startedFreshSession }: {
   run: RunRecord
   replies: { id: number; text: string }[]
@@ -107,6 +127,7 @@ function RunMessage({ run, replies, preview, startedFreshSession }: {
         >
           {run.prompt}
         </div>
+        <AttachmentLinks files={run.attachments ?? []} label="此消息的附件" />
         <time className="px-1 text-[11px] text-muted-foreground/80">
           {new Date(run.started).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </time>
@@ -241,14 +262,10 @@ export function MessageStream({
           </Alert>
         )}
 
-        {Boolean(transcript?.attachments?.length) && <div className="grid gap-2 text-sm" aria-label="任务附件">
-          {transcript?.attachments?.map(file => <a key={file.id} className="w-fit max-w-full break-all text-link underline"
-            href={endpoint(`attachment?id=${file.id}`).href} download={file.name}>
-            {file.inline && <img className="max-h-44 max-w-full rounded object-contain"
-              src={endpoint(`attachment?id=${file.id}&preview=1`).href} alt={file.name} />}
-            {file.name}
-          </a>)}
-        </div>}
+        {!!transcript?.attachments?.length && <section className="grid justify-items-start gap-2">
+          <p className="text-xs text-muted-foreground">历史任务附件</p>
+          <AttachmentLinks files={transcript.attachments} label="历史任务附件" />
+        </section>}
 
         {!task.runs.length && (
           <div className="mx-auto my-12 flex max-w-lg flex-col items-center gap-4 px-6 py-8 text-center">
