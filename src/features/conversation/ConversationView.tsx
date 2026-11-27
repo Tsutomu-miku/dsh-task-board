@@ -46,6 +46,7 @@ export function ConversationView({
   const [editing, setEditing] = useState(false)
   const [showChanges, setShowChanges] = useState(false)
   const [git, setGit] = useState<GitDelivery | null>(task.runs[0]?.delivery ?? null)
+  const [hasWorktrees, setHasWorktrees] = useState(false)
   const [blockReason, setBlockReason] = useState<string | null>(null)
   const [moveError, setMoveError] = useState("")
   const active = task.status === "running"
@@ -55,7 +56,10 @@ export function ConversationView({
 
   useEffect(() => {
     const controller = new AbortController()
-    void fetchDelivery(task.id, true, controller.signal).then(({ git }) => setGit(git)).catch(() => {})
+    void fetchDelivery(task.id, true, controller.signal).then(result => {
+      setGit(result.git)
+      setHasWorktrees(result.hasWorktrees)
+    }).catch(() => {})
     return () => controller.abort()
   }, [task.id, effectiveWorkdir, latest?.id, latest?.status, showChanges])
 
@@ -128,9 +132,9 @@ export function ConversationView({
               </Select>
             )}
 
-            {git && <Button variant="outline" size="sm" onClick={() => setShowChanges(true)}>
+            {(git || hasWorktrees) && <Button variant="outline" size="sm" onClick={() => setShowChanges(true)}>
               <GitCompare className="size-3.5" aria-hidden="true" />变更
-              <span className="rounded-full bg-secondary px-1.5 text-[11px] tabular-nums">{git.fileCount ?? git.files.length}</span>
+              {git && <span className="rounded-full bg-secondary px-1.5 text-[11px] tabular-nums">{git.fileCount ?? git.files.length}</span>}
             </Button>}
             {(task.status === "done" || task.archived) && <Button variant="ghost" size="sm" onClick={() => {
               void save({ action: "archive", id: task.id, archived: !task.archived }).catch(err => setMoveError((err as Error).message))
@@ -175,7 +179,7 @@ export function ConversationView({
           queue={queue} preference={defaultSendMode} save={save} />
       )}
 
-      {showChanges && <ChangesDrawer taskId={task.id} onClose={() => setShowChanges(false)} />}
+      {showChanges && <ChangesDrawer taskId={task.id} save={save} onClose={() => setShowChanges(false)} />}
       {blockReason !== null && <Dialog open onOpenChange={open => { if (!open) setBlockReason(null) }}>
         <DialogContent>
           <DialogHeader><DialogTitle>标记为已阻塞</DialogTitle><DialogDescription>说明需要什么信息或操作才能继续。</DialogDescription></DialogHeader>

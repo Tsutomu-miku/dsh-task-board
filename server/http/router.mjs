@@ -81,6 +81,10 @@ export function registerRoutes(ctx, { board, css, environment }) {
     const run = query.get("run")
     return board.delivery(assertUuid(query.get("card"), "任务编号"), run ? assertUuid(run, "运行编号") : null, query.get("summary") === "1")
   })
+  registerJson("worktrees", "GET", request => {
+    const id = new URL(request.url).searchParams.get("card")
+    return board.worktrees(assertUuid(id, "任务编号"))
+  })
   register("attachment", ["GET"], request => {
     try {
       const query = new URL(request.url).searchParams
