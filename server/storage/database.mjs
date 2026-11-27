@@ -12,10 +12,6 @@ const SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS board_resources_by_scope ON board_resources (kind, scope);
   CREATE TABLE IF NOT EXISTS board_files (id TEXT PRIMARY KEY, body BLOB NOT NULL);
-  CREATE TABLE IF NOT EXISTS board_capabilities (run_id TEXT PRIMARY KEY, token TEXT UNIQUE NOT NULL);
-  CREATE TABLE IF NOT EXISTS board_commands (
-    id TEXT PRIMARY KEY, run_id TEXT NOT NULL, action TEXT NOT NULL, data TEXT NOT NULL, result TEXT
-  );
 
   CREATE TABLE IF NOT EXISTS cards (
     id TEXT PRIMARY KEY,

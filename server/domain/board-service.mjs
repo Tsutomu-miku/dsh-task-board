@@ -45,7 +45,6 @@ export function openBoard({
     })
 
     storage.atomic(() => {
-      collaboration.reset()
       executors.seed()
       for (const card of cards.list()) {
         cards.attachLegacyExecutor(card)
@@ -116,7 +115,10 @@ export function openBoard({
         if (input.action === "steer") return runs.steer(card, input)
         if (input.action === "send") return runs.send(card, input)
         if (input.action === "cancel-queued") {
-          if (!queue.remove(input.messageId, card.id)) throw new BoardError(409, "This message has left the queue.")
+          storage.atomic(() => {
+            if (!queue.remove(input.messageId, card.id)) throw new BoardError(409, "This message has left the queue.")
+            collaboration.removeMessageFiles(card.id, input.messageId)
+          })
           runs.drain()
           return { canceled: input.messageId }
         }
@@ -162,8 +164,7 @@ export function openBoard({
       close() {
         if (closePromise) return closePromise
         shutdown.abort()
-        collaboration.close()
-        closePromise = runs.close().finally(() => storage.close())
+        closePromise = Promise.all([collaboration.close(), runs.close()]).finally(() => storage.close())
         return closePromise
       },
     }

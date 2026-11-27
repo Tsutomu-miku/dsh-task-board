@@ -1,7 +1,9 @@
 import { assertPlainObject, assertUuid, BoardError } from "../errors.mjs"
+import { MAX_ATTACHMENT_BYTES } from "../domain/attachments.mjs"
 
 const API_PREFIX = "/api/dsh-task-board/"
 const MAX_BODY_BYTES = 100_000
+const MAX_ACTION_BYTES = Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4 + MAX_BODY_BYTES
 const BASE_HEADERS = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
@@ -12,8 +14,10 @@ async function parseJsonBody(request) {
   if (contentType !== "application/json") {
     throw new BoardError(415, "需要 JSON 请求。")
   }
+  if (Number(request.headers.get("content-length")) > MAX_ACTION_BYTES) throw new BoardError(413, "请求过大。")
   const raw = await request.text()
-  if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+  const size = Buffer.byteLength(raw)
+  if (size > MAX_ACTION_BYTES) {
     throw new BoardError(413, "请求过大。")
   }
   let parsed
@@ -21,6 +25,9 @@ async function parseJsonBody(request) {
     parsed = JSON.parse(raw)
   } catch {
     throw new BoardError(400, "请求数据有误。")
+  }
+  if (size > MAX_BODY_BYTES && (parsed?.action !== "send" || !Array.isArray(parsed.attachments))) {
+    throw new BoardError(413, "请求过大。")
   }
   return assertPlainObject(parsed)
 }
@@ -90,10 +97,11 @@ export function registerRoutes(ctx, { board, css, environment }) {
       const query = new URL(request.url).searchParams
       const file = board.file(assertUuid(query.get("id"), "附件编号"))
       const inline = query.get("preview") === "1" && file.inline
+      const filename = encodeURIComponent(file.name.toWellFormed()).replace(/['()*]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase()}`)
       return new Response(file.bytes, { headers: {
         ...BASE_HEADERS,
         "content-type": inline ? file.mime : "application/octet-stream",
-        "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${filename}`,
         "content-security-policy": "default-src 'none'; sandbox",
       } })
     } catch (error) {

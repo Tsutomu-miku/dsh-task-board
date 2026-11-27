@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { Readable } from "node:stream"
 import { BoardError } from "../../errors.mjs"
 import { applyDshModel } from "./model.mjs"
 import { followDshPreview } from "./preview.mjs"
@@ -169,14 +170,16 @@ export async function runDsh(ctx, {
     signal.addEventListener("abort", stopHandler, { once: true })
 
     const content = [{ type: "text", text: prompt }]
-    const images = attachments.filter(file => file.inline)
-    const model = images.length ? agent.model?.current?.() : null
-    if (model && ctx.llm?.resolveModelInfo) {
-      const metadata = await ctx.llm.resolveModelInfo(model.provider, model.model).catch(() => null)
-      if (metadata?.inputModalities?.includes("image")) {
-        for (const file of images) content.push({
-          type: "image", mediaType: file.mime, name: file.name, data: Buffer.from(file.bytes).toString("base64"),
+    const model = attachments.some(file => file.inline) ? agent.model?.current?.() : null
+    const metadata = model ? await ctx.llm.resolveModelInfo(model.provider, model.model).catch(() => null) : null
+    for (const file of attachments) {
+      if (file.inline && metadata?.inputModalities?.includes("image")) {
+        content.push({ type: "image", mediaType: file.mime, name: file.name, data: Buffer.from(file.bytes).toString("base64") })
+      } else {
+        const { receiptId } = await ctx.fileUploads.uploadStream({
+          sessionId, name: file.name, data: Readable.from([file.bytes]), signal,
         })
+        content.push({ type: "file", receiptId })
       }
     }
     await sessionController.prompt({

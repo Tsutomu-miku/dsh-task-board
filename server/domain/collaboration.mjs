@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto"
 import { assertPlainObject, BoardError, requireText } from "../errors.mjs"
-import { createToolCommands, createWorkflowRepository } from "../storage/workflow-repository.mjs"
+import { createWorkflowRepository } from "../storage/workflow-repository.mjs"
+import { openRunCallback } from "./run-callback.mjs"
 
 const OUTPUT_STATES = ["blocked", "review", "todo"]
 const OUTCOME = "board_set_outcome"
@@ -26,11 +28,11 @@ export const BOARD_RUN_TOOLS = [
 
 export function createCollaboration({ storage, cards, executors }) {
   const store = createWorkflowRepository(storage.db)
-  const commands = createToolCommands(storage.db)
   const access = new Map()
+  const tokens = new Map()
   const dshAgents = new WeakMap()
   let runs
-  let timer
+  let callback
   let enabled = true
 
   function active(runId) {
@@ -65,38 +67,38 @@ export function createCollaboration({ storage, cards, executors }) {
     return { cardId: card.id, messageId: message.id }
   }
 
-  function handleCommands() {
-    for (const item of commands.pending()) {
-      try {
-        commands.finish(item.id, { value: runTool(item.run_id, item.action, JSON.parse(item.data)) })
-      } catch (error) {
-        commands.finish(item.id, { error: error instanceof BoardError ? error.message : "看板工具操作失败。" })
-      }
-    }
-  }
-
   return {
-    start(manager) {
-      runs = manager
-      timer = setInterval(() => { if (access.size) handleCommands() }, 175)
-      timer.unref()
+    start(manager) { runs = manager },
+    close() {
+      enabled = false
+      access.clear()
+      tokens.clear()
+      return callback?.close()
     },
-    close() { enabled = false; clearInterval(timer) },
-    reset: store.reset,
     authorize(job, attempt, executor) {
-      const token = executor.engine === "codex" ? store.authorize(job.runId) : null
-      access.set(job.runId, { job, attempt, executor })
-      return { token, canDelegate: executor.agentTools === true, bindDshAgent(agent) { dshAgents.set(agent, job.runId) } }
+      const token = executor.engine === "codex" ? randomBytes(32).toString("hex") : null
+      if (token) {
+        callback ??= openRunCallback(key => active(tokens.get(key)),
+          (key, name, args) => runTool(tokens.get(key), name, args))
+        tokens.set(token, job.runId)
+      }
+      access.set(job.runId, { job, attempt, executor, token })
+      return { token, port: token ? callback.port : null, canDelegate: executor.agentTools === true,
+        bindDshAgent(agent) { dshAgents.set(agent, job.runId) } }
     },
-    revoke(runId) { store.revoke(runId); access.delete(runId) },
+    revoke(runId) {
+      const token = access.get(runId)?.token
+      if (token) tokens.delete(token)
+      access.delete(runId)
+    },
     hasDshTool(agent, name) {
       const entry = active(dshAgents.get(agent))
       return Boolean(entry && (name === OUTCOME || (name === DELEGATE && entry.executor.agentTools)))
     },
     agentTool(name, args, agent) { return runTool(dshAgents.get(agent), name, args) },
-    rolePrompt(card, executor) {
+    rolePrompt(card, executor, includeInstructions) {
       const parts = [
-        executor.instructions,
+        includeInstructions ? executor.instructions : null,
         `Board task ${card.id}. If blocked, delivering, or leaving work pending, call board_set_outcome with the corresponding status and a concise reason.`,
       ]
       if (executor.agentTools) {
@@ -107,8 +109,10 @@ export function createCollaboration({ storage, cards, executors }) {
       return parts.filter(Boolean).join("\n\n")
     },
     attachments: store.attachments,
-    files(cardId) {
-      return store.attachments(cardId).flatMap(record => {
+    addMessageFiles: store.addMessageFiles,
+    removeMessageFiles: store.removeMessageFiles,
+    files(attachments = []) {
+      return attachments.flatMap(record => {
         const bytes = store.file(record.id)
         return bytes ? [{ ...record, bytes }] : []
       })

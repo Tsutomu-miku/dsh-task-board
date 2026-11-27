@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs"
 import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 import { UUID_PATTERN } from "../../errors.mjs"
+import { RUN_PORT_ENV, RUN_TOKEN_ENV } from "../../domain/run-callback.mjs"
 import { reportCodexActivity } from "./activity.mjs"
 
 const WORKER_PATH = fileURLToPath(new URL("./worker.mjs", import.meta.url))
@@ -21,7 +22,8 @@ export function codexArgs(session, sandbox, model, contextServer, images = []) {
     )
     if (contextServer.token) {
       args.push(
-        "-c", 'mcp_servers.dsh_task_board.env_vars=["DSH_TASK_BOARD_RUN_ACCESS"]',
+        "-c", `mcp_servers.dsh_task_board.env_vars=${JSON.stringify([RUN_TOKEN_ENV, RUN_PORT_ENV])}`,
+        "-c", `shell_environment_policy.exclude=${JSON.stringify([RUN_TOKEN_ENV, RUN_PORT_ENV])}`,
         "-c", 'mcp_servers.dsh_task_board.tools.board_set_outcome.approval_mode="approve"',
       )
       if (contextServer.canDelegate) {
@@ -62,7 +64,12 @@ export function runCodex({
   // hosts can create Codex sandbox mounts even after a launcher's temp dir expires.
   mkdirSync(tempDir, { recursive: true, mode: 0o700 })
   const env = { ...process.env, TMPDIR: tempDir, TMP: tempDir, TEMP: tempDir }
-  if (contextServer?.token) env.DSH_TASK_BOARD_RUN_ACCESS = contextServer.token
+  delete env[RUN_TOKEN_ENV]
+  delete env[RUN_PORT_ENV]
+  if (contextServer?.token) {
+    env[RUN_TOKEN_ENV] = contextServer.token
+    env[RUN_PORT_ENV] = String(contextServer.port)
+  }
 
   return new Promise(resolve => {
     const child = fork(WORKER_PATH, args, {

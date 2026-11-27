@@ -38,6 +38,7 @@ export interface QueuedMessage {
   prompt: string
   error: string | null
   waitingReason?: string
+  attachments?: TaskAttachment[]
 }
 
 export const SANDBOX_LABELS = {
@@ -98,6 +99,7 @@ export interface RunRecord {
   executor: Executor
   sourceWorkdir?: string
   delivery?: GitDelivery | null
+  attachments?: TaskAttachment[]
   handoffNote?: string
   handoff?: { sourceRunId: string; afterRunId: string | null; includedRunIds: string[] }
 }
@@ -206,6 +208,7 @@ export type BoardAction =
       runId?: string
       freshSession?: boolean
       model?: ModelSelection | null
+      attachments?: { name: string; data: string }[]
     }
   | { action: "cancel-queued"; id: string; messageId: string }
   | { action: "set-default-send-mode"; mode: DefaultSendMode }

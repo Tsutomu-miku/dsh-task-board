@@ -11,7 +11,7 @@ import { createEnvironment } from "./server/runners/environment.mjs"
 import { createRunnerDispatcher } from "./server/runners/index.mjs"
 
 export const name = "dsh-task-board"
-export const inject = ["profileContext", "connection", "sessionController", "sessions", "agentPresets", "llm", "tools"]
+export const inject = ["profileContext", "connection", "sessionController", "sessions", "agentPresets", "llm", "tools", "fileUploads"]
 
 export function apply(ctx, config = {}) {
   if (process.platform === "win32") {
