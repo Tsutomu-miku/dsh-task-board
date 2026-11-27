@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { join } from "node:path"
 import { parsePluginConfig, resolveWorkspace } from "./server/config.mjs"
+import { BOARD_RUN_TOOLS } from "./server/domain/collaboration.mjs"
 import { BOARD_CONTEXT_TOOLS } from "./server/domain/board-context.mjs"
 import { boardDatabasePath } from "./server/storage/board-path.mjs"
 import { openBoard } from "./server/domain/board-service.mjs"
@@ -26,7 +27,7 @@ export function apply(ctx, config = {}) {
     )
   }
   const css = readFileSync(cssFile)
-  const { workdir, codexSandbox } = parsePluginConfig(config, ctx.profileContext.cwd)
+  const { workdir, codexSandbox, parallelism, timeoutMs, maxTokens } = parsePluginConfig(config, ctx.profileContext.cwd)
   const dataDir = join(ctx.profileContext.dir, "task-board")
   mkdirSync(dataDir, { recursive: true, mode: 0o700 })
 
@@ -39,7 +40,7 @@ export function apply(ctx, config = {}) {
   const board = openBoard({
     database: boardDatabasePath(ctx.profileContext.dir),
     workdir,
-    codexSandbox,
+    codexSandbox, parallelism, timeoutMs, maxTokens,
     presets: () => ctx.agentPresets.list(),
     models: environment.models,
     run,
@@ -62,6 +63,21 @@ export function apply(ctx, config = {}) {
         return JSON.stringify(board.context(name, args))
       },
     })
+  }
+
+  for (const { name, description, inputSchema } of BOARD_RUN_TOOLS) {
+    ctx.tools.register({
+      name, description, parameters: inputSchema,
+      output: {
+        schema: { type: "string" },
+        render: (_args, value) => [{ type: "text", text: value }],
+      },
+      isConcurrencySafe: () => false,
+      async execute(args, { signal, agent }) {
+        signal.throwIfAborted()
+        return JSON.stringify(board.agentTool(name, args, agent))
+      },
+    }, { when: ({ agent }) => board.hasAgentAccess(agent) })
   }
 
   registerRoutes(ctx, {

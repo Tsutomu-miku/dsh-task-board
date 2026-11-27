@@ -1,6 +1,6 @@
 import { assertPlainObject, BoardError, UUID_PATTERN } from "../errors.mjs"
 
-const STATUSES = ["todo", "running", "review", "done"]
+const STATUSES = ["todo", "running", "blocked", "review", "done"]
 const CONTEXT_CHARS = 24_000
 const pageSize = { type: "integer", minimum: 1, maximum: 50, default: 12 }
 const cursor = { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER }
@@ -63,46 +63,49 @@ function boundedInteger(value, schema, label) {
 export function createBoardContext(db, replies) {
   const fields = `
     cards.id, cards.created,
-    json_extract(data, '$.title') AS title,
-    json_extract(data, '$.status') AS status,
-    json_extract(data, '$.workdir') AS workdir,
-    json_extract(data, '$.engine') AS engine,
-    json_extract(data, '$.executorId') AS executorId
+    json_extract(cards.data, '$.title') AS title,
+    json_extract(cards.data, '$.status') AS status,
+    json_extract(cards.data, '$.workdir') AS workdir,
+    json_extract(cards.data, '$.engine') AS engine,
+    json_extract(cards.data, '$.executorId') AS executorId
   `
   const list = db.prepare(`
     SELECT ${fields}, rowid AS cursor FROM cards
-    WHERE (? IS NULL OR rowid < ?) AND (? IS NULL OR status = ?)
+    WHERE coalesce(json_extract(cards.data, '$.archived'), 0) = 0 AND (? IS NULL OR rowid < ?) AND (? IS NULL OR status = ?)
       AND (? IS NULL OR workdir = ?) AND (? IS NULL OR instr(lower(title), lower(?)) > 0)
     ORDER BY rowid DESC LIMIT ?
   `)
   const task = db.prepare(`
-    SELECT ${fields}, json_extract(data, '$.prompt') AS prompt,
-      coalesce(json_extract(data, '$.brief'), json_extract(data, '$.runs[#-1].prompt'), json_extract(data, '$.prompt')) AS brief,
-      json_extract(data, '$.runs[0].id') AS runId,
-      json_extract(data, '$.runs[0].status') AS runStatus,
-      json_extract(data, '$.runs[0].started') AS runStarted,
-      json_extract(data, '$.runs[0].finished') AS runFinished,
-      json_extract(data, '$.runs[0].executor.name') AS runExecutor,
-      json_extract(data, '$.runs[0].executor.model.id') AS runModel,
-      json_extract(data, '$.runs[0].error') AS runError,
-      json_extract(data, '$.runs[0].output') AS runOutput
-    FROM cards WHERE id = ?
+    SELECT ${fields}, json_extract(cards.data, '$.prompt') AS prompt,
+      coalesce(json_extract(cards.data, '$.brief'), json_extract(cards.data, '$.prompt')) AS brief,
+      json_extract(cards.data, '$.blockedReason') AS blockedReason,
+      json_extract(cards.data, '$.project') AS project,
+      json_extract(run.data, '$.id') AS runId,
+      json_extract(run.data, '$.status') AS runStatus,
+      json_extract(run.data, '$.started') AS runStarted,
+      json_extract(run.data, '$.finished') AS runFinished,
+      json_extract(run.data, '$.executor.name') AS runExecutor,
+      json_extract(run.data, '$.executor.model.id') AS runModel,
+      json_extract(run.data, '$.error') AS runError,
+      json_extract(run.data, '$.output') AS runOutput
+    FROM cards LEFT JOIN board_runs AS run ON run.id = (
+      SELECT id FROM board_runs WHERE card_id = cards.id ORDER BY ordinal DESC LIMIT 1
+    ) WHERE cards.id = ?
   `)
   const turnIndex = db.prepare(`
-    SELECT turn.key AS ordinal FROM cards, json_each(cards.data, '$.runs') AS turn
-    WHERE cards.id = ? AND json_extract(turn.value, '$.id') = ?
+    SELECT ordinal FROM board_runs WHERE card_id = ? AND id = ?
   `)
   const turns = db.prepare(`
-    SELECT json_extract(turn.value, '$.id') AS runId,
-      coalesce(json_extract(turn.value, '$.prompt'), '') AS request,
-      json_extract(turn.value, '$.executor.name') AS executor,
-      json_extract(turn.value, '$.executor.workdir') AS workdir,
-      json_extract(turn.value, '$.status') AS status,
-      json_extract(turn.value, '$.output') AS result,
-      json_extract(turn.value, '$.error') AS error
-    FROM cards, json_each(cards.data, '$.runs') AS turn
-    WHERE cards.id = ? AND turn.key >= ?
-    ORDER BY turn.key ASC LIMIT ?
+    SELECT json_extract(turn.data, '$.id') AS runId,
+      coalesce(json_extract(turn.data, '$.prompt'), '') AS request,
+      json_extract(turn.data, '$.executor.name') AS executor,
+      json_extract(turn.data, '$.executor.workdir') AS workdir,
+      json_extract(turn.data, '$.status') AS status,
+      json_extract(turn.data, '$.output') AS result,
+      json_extract(turn.data, '$.error') AS error
+    FROM board_runs AS turn
+    WHERE card_id = ? AND ordinal < ?
+    ORDER BY ordinal DESC LIMIT ?
   `)
 
   return {
@@ -134,14 +137,14 @@ export function createBoardContext(db, replies) {
       const row = task.get(taskId)
       if (!row) throw new BoardError(404, "Task not found.")
       if (name === "board_read_turns") {
-        let start = 0
+        let start = Number.MAX_SAFE_INTEGER
         if (args.beforeRunId !== undefined) {
           if (typeof args.beforeRunId !== "string" || !UUID_PATTERN.test(args.beforeRunId)) {
             throw new BoardError(400, "Invalid beforeRunId.")
           }
           const anchor = turnIndex.get(taskId, args.beforeRunId)
           if (!anchor) throw new BoardError(404, "Run not found in this task.")
-          start = anchor.ordinal + 1
+          start = anchor.ordinal
         }
         const found = turns.all(taskId, start, limit + 1)
         const page = []

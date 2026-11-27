@@ -21,7 +21,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   save: BoardSaveFn
 }) {
   const waiting = queue.filter(item => item.cardId === task.id)
-  const [draft, setDraft] = useState(() => task.runs.length || waiting.length ? "" : task.prompt)
+  const [draft, setDraft] = useState(() => task.runs.length || waiting.length ? "" : (task.brief ?? task.prompt))
   const [target, setTarget] = useState<string | null>(null)
   const [selectedMode, setSelectedMode] = useState<{ mode: SendMode; runId: string } | null>(null)
   const [error, setError] = useState("")
@@ -40,7 +40,7 @@ export function ComposerBox({ task, executors, running, queue, preference, save 
   const workdir = executor?.workdir ?? task.workdir
   const previous = task.runs.find(run =>
     run.session && run.status === "succeeded" && run.executor.id === executor?.id &&
-    run.executor.workdir === workdir && run.executor.preset === executor?.preset)
+    (run.sourceWorkdir ?? run.executor.workdir) === workdir && run.executor.preset === executor?.preset)
   const resume = Boolean(previous && !freshSession)
   const inheritedModel = resume ? previous?.executor.model ?? null : executor?.model ?? null
   const taskExecutor = executors.find(item => item.id === task.executorId)

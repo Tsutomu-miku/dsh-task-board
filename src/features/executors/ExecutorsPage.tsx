@@ -39,7 +39,8 @@ export function ExecutorsPage({
   const [busyId, setBusyId] = useState<string | null>(null)
   const { environment, checking, error: envError, reload } = useEnvironment(null)
 
-  async function mutate(id: string, action: { action: "toggle-executor"; enabled: boolean } | { action: "set-default-executor" }) {
+  async function mutate(id: string, action: { action: "toggle-executor"; enabled: boolean } |
+    { action: "set-default-executor" | "delete-executor" }) {
     setBusyId(id)
     setError("")
     try {
@@ -165,7 +166,7 @@ export function ExecutorsPage({
                       {environment?.presets.find(p => p.id === row.preset)?.name ?? row.preset ?? "跟随 DSH 默认"}
                     </dd>
                   </div>
-                ) : (
+                ) : row.engine === "codex" ? (
                   <div className="grid grid-cols-[5.5rem_1fr] items-start gap-2">
                     <dt className="flex items-center gap-1.5 text-muted-foreground">
                       {row.sandbox === "workspace-write" ? (
@@ -179,7 +180,7 @@ export function ExecutorsPage({
                       {SANDBOX_LABELS[row.sandbox ?? "read-only"]}
                     </dd>
                   </div>
-                )}
+                ) : <dd className="break-all font-mono text-xs">{row.command} {row.args?.join(" ")}</dd>}
               </dl>
 
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
@@ -207,6 +208,10 @@ export function ExecutorsPage({
                     <Star className="size-3.5" aria-hidden="true" />
                     设为默认
                   </Button>
+                )}
+                {!row.enabled && !["local-dsh", "local-codex"].includes(row.id) && (
+                  <Button size="sm" variant="ghost" disabled={busyId !== null}
+                    onClick={() => void mutate(row.id, { action: "delete-executor" })}>删除</Button>
                 )}
               </div>
             </article>

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+import { BoardError } from "../../errors.mjs"
 import { applyDshModel } from "./model.mjs"
 import { followDshPreview } from "./preview.mjs"
 
@@ -34,11 +36,14 @@ export async function runDsh(ctx, {
   session,
   requestId,
   interruptedRequests,
+  attachments = [],
+  boardAccess,
   signal,
   onSession,
   onEvent,
   onPreview,
   onUsage,
+  onControls,
 }) {
   const { sessionController, sessions } = ctx
 
@@ -70,6 +75,7 @@ export async function runDsh(ctx, {
     if (executor.model) {
       await applyDshModel(ctx, agent, executor.model, signal)
     }
+    boardAccess?.bindDshAgent(agent)
 
     const interrupted = new Set(interruptedRequests)
     for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep]) {
@@ -83,6 +89,7 @@ export async function runDsh(ctx, {
     let ended = false
     let result
     let settle
+    const steering = new Set()
     const toolNames = new Map()
     const completed = new Promise(resolve => { settle = resolve })
 
@@ -109,6 +116,17 @@ export async function runDsh(ctx, {
       } else if (type === "user/message" && isOwnedMessage(data)) {
         ownedTurn = currentTurn
         onEvent("status", "DSH 已接收任务", time)
+        if (typeof agent.send === "function") onControls?.({
+          steer(text) {
+            if (ended || signal.aborted || ownedTurn !== currentTurn || agent.status !== "running") {
+              throw new BoardError(409, "当前 DSH 轮次已结束。")
+            }
+            const id = randomUUID()
+            agent.send({ id, role: "user", source: { kind: "user", rpcId: id },
+              content: [{ type: "text", text }] }, "next-step", false)
+            steering.add(id)
+          },
+        })
       } else if (type === "assistant/message" && ownedTurn === data.turn) {
         const { usage } = data
         if (usage) {
@@ -141,6 +159,7 @@ export async function runDsh(ctx, {
         toolNames.delete(message?.toolCallId)
       } else if (type === "turn/end" && ownedTurn === data.turn) {
         ended = true
+        onControls?.({})
         result = mapTurnResult(data.reason, output)
         settle()
       }
@@ -149,11 +168,22 @@ export async function runDsh(ctx, {
     disposePreview = followDshPreview(ctx, agent, turn => !ended && ownedTurn === turn, onPreview)
     signal.addEventListener("abort", stopHandler, { once: true })
 
+    const content = [{ type: "text", text: prompt }]
+    const images = attachments.filter(file => file.inline)
+    const model = images.length ? agent.model?.current?.() : null
+    if (model && ctx.llm?.resolveModelInfo) {
+      const metadata = await ctx.llm.resolveModelInfo(model.provider, model.model).catch(() => null)
+      if (metadata?.inputModalities?.includes("image")) {
+        for (const file of images) content.push({
+          type: "image", mediaType: file.mime, name: file.name, data: Buffer.from(file.bytes).toString("base64"),
+        })
+      }
+    }
     await sessionController.prompt({
       sessionId,
       requestId,
       mode: "queue",
-      content: [{ type: "text", text: prompt }],
+      content,
     }, signal)
 
     if (signal.aborted) stopHandler()
@@ -161,6 +191,9 @@ export async function runDsh(ctx, {
 
     const orphaned = !ended && findPending()
     if (orphaned) agent.inbox.remove(orphaned.id)
+    for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep]) {
+      if (steering.has(message.id)) agent.inbox.remove(message.id)
+    }
     await sessions.flush(agent.session)
 
     if (signal.aborted && result?.status !== "succeeded") {

@@ -9,17 +9,23 @@ export function useBoard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const revisionRef = useRef(0)
-  const snapshotRef = useRef("")
+  const snapshotRef = useRef<BoardState | null>(null)
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const seq = ++revisionRef.current
     try {
-      const next = await fetchBoardState(signal)
+      const next = await fetchBoardState(snapshotRef.current?.revision ?? 0, signal)
       if (seq !== revisionRef.current || signal?.aborted) return
-      const serialized = JSON.stringify(next)
-      if (serialized !== snapshotRef.current) {
-        snapshotRef.current = serialized
-        setBoard(next)
+      if (!("unchanged" in next)) {
+        let cards = next.cards
+        if (next.delta && snapshotRef.current) {
+          const merged = new Map(snapshotRef.current.cards.map(card => [card.id, card]))
+          for (const id of next.removed ?? []) merged.delete(id)
+          for (const card of next.cards) merged.set(card.id, card)
+          cards = [...merged.values()].sort((a, b) => a.created - b.created)
+        }
+        snapshotRef.current = { ...next, cards }
+        setBoard(snapshotRef.current)
       }
       setError("")
     } catch (err) {

@@ -1,3 +1,4 @@
+import { Terminal } from "lucide-react"
 import codexLogo from "../assets/icons/codex.svg"
 import dshLogo from "../assets/icons/dsh.svg"
 import { ENGINES, type Engine } from "../types/board"
@@ -6,6 +7,7 @@ import { cn } from "../lib/utils"
 const logos = { dsh: dshLogo, codex: codexLogo }
 
 export function EngineIcon({ engine, className }: { engine: Engine; className?: string }) {
+  if (engine === "command") return <Terminal aria-hidden="true" className={cn("size-3.5 shrink-0", className)} />
   return (
     <img src={logos[engine]} alt="" width={16} height={16} draggable={false}
       className={cn("size-3.5 shrink-0 object-contain", engine === "dsh" && "rounded-[18%] bg-white", className)}

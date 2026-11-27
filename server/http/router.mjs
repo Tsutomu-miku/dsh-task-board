@@ -13,7 +13,7 @@ async function parseJsonBody(request) {
     throw new BoardError(415, "需要 JSON 请求。")
   }
   const raw = await request.text()
-  if (Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+  if (Buffer.byteLength(raw) > 7_000_000) {
     throw new BoardError(413, "请求过大。")
   }
   let parsed
@@ -21,6 +21,9 @@ async function parseJsonBody(request) {
     parsed = JSON.parse(raw)
   } catch {
     throw new BoardError(400, "请求数据有误。")
+  }
+  if (parsed?.action !== "add-attachment" && Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+    throw new BoardError(413, "请求过大。")
   }
   return assertPlainObject(parsed)
 }
@@ -74,7 +77,30 @@ export function registerRoutes(ctx, { board, css, environment }) {
     new Response(null, { status: 302, headers: { ...BASE_HEADERS, location: "../../" } })
   )
 
-  registerJson("state", "GET", () => board.read())
+  registerJson("state", "GET", request =>
+    board.read(queryInteger(new URL(request.url).searchParams, "after", 1)))
+  registerJson("task-detail", "GET", request =>
+    board.detail(assertUuid(new URL(request.url).searchParams.get("card"), "任务编号")))
+  registerJson("delivery", "GET", request => {
+    const query = new URL(request.url).searchParams
+    const run = query.get("run")
+    return board.delivery(assertUuid(query.get("card"), "任务编号"), run ? assertUuid(run, "运行编号") : null)
+  })
+  register("attachment", ["GET"], request => {
+    try {
+      const query = new URL(request.url).searchParams
+      const file = board.file(assertUuid(query.get("id"), "附件编号"))
+      const inline = query.get("preview") === "1" && file.inline
+      return new Response(file.bytes, { headers: {
+        ...BASE_HEADERS,
+        "content-type": inline ? file.mime : "application/octet-stream",
+        "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        "content-security-policy": "default-src 'none'; sandbox",
+      } })
+    } catch (error) {
+      return new Response(null, { status: error instanceof BoardError ? error.status : 500, headers: BASE_HEADERS })
+    }
+  })
 
   registerJson("environment", "GET", request => {
     const query = new URL(request.url).searchParams

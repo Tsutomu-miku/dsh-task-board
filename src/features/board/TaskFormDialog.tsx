@@ -19,6 +19,7 @@ import { ENGINES, type BoardSaveFn, type Executor, type TaskItem } from "../../s
 
 export function TaskFormDialog({
   existing,
+  tasks = [],
   executors,
   preferredExecutorId,
   defaultWorkdir,
@@ -27,6 +28,7 @@ export function TaskFormDialog({
   save,
 }: {
   existing?: TaskItem
+  tasks?: TaskItem[]
   executors: Executor[]
   preferredExecutorId: string | null
   defaultWorkdir: string
@@ -36,9 +38,18 @@ export function TaskFormDialog({
 }) {
   const enabledExecutors = executors.filter(row => row.enabled)
   const [title, setTitle] = useState(existing?.title ?? "")
-  const [prompt, setPrompt] = useState(existing?.prompt ?? "")
+  const [prompt, setPrompt] = useState(existing?.brief ?? existing?.prompt ?? "")
   const [executorId, setExecutorId] = useState(existing?.executorId ?? preferredExecutorId ?? enabledExecutors[0]?.id ?? "")
   const [workdir, setWorkdir] = useState(existing?.workdir ?? "")
+  const [project, setProject] = useState(existing?.project ?? "")
+  const [labels, setLabels] = useState(existing?.labels?.join(", ") ?? "")
+  const [priority, setPriority] = useState(existing?.priority ?? 0)
+  const [parentId, setParentId] = useState(existing?.parentId ?? "")
+  const [stage, setStage] = useState(existing?.stage ?? 0)
+  const [blockedBy, setBlockedBy] = useState(existing?.blockedBy ?? [])
+  const [blockedReason, setBlockedReason] = useState(existing?.blockedReason ?? "")
+  const [workspaceMode, setWorkspaceMode] = useState(existing?.workspaceMode ?? "isolated")
+  const [prUrl, setPrUrl] = useState(existing?.prUrl ?? "")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -51,6 +62,17 @@ export function TaskFormDialog({
     setBusy(true)
     setError("")
     try {
+      const metadata = {
+        project: project.trim() || null,
+        labels: labels.split(/[,，]/).map(label => label.trim()).filter(Boolean),
+        priority,
+        parentId: parentId || null,
+        stage: parentId ? stage : 0,
+        blockedBy,
+        blockedReason: blockedReason.trim() || null,
+        workspaceMode,
+        prUrl: prUrl.trim() || null,
+      }
       if (existing) {
         await save({
           action: "update",
@@ -60,6 +82,7 @@ export function TaskFormDialog({
           prompt,
           ...(chosen ? { executorId: chosen.id } : {}),
           workdir: workdir.trim(),
+          ...metadata,
         })
       } else {
         await save({
@@ -68,6 +91,7 @@ export function TaskFormDialog({
           prompt,
           executorId,
           ...(workdir.trim() ? { workdir: workdir.trim() } : {}),
+          ...metadata,
         })
       }
       onClose()
@@ -162,6 +186,28 @@ export function TaskFormDialog({
             />
           </div>
 
+          <details className="grid rounded-xl border p-3" open={Boolean(existing?.parentId || existing?.project || existing?.blockedReason)}>
+            <summary className="cursor-pointer text-sm font-medium">编排、Git 与交付</summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm">项目<Input value={project} maxLength={80} onChange={e => setProject(e.target.value)} /></label>
+              <label className="grid gap-1 text-sm">标签（逗号分隔）<Input value={labels} onChange={e => setLabels(e.target.value)} /></label>
+              <label className="grid gap-1 text-sm">优先级（4 最高）<Input type="number" min="0" max="4" value={priority} onChange={e => setPriority(Number(e.target.value))} /></label>
+              <label className="grid gap-1 text-sm">工作区<select className="h-9 rounded-md border bg-card px-2" value={workspaceMode} onChange={e => setWorkspaceMode(e.target.value as typeof workspaceMode)}>
+                <option value="isolated">Git 工作树隔离</option><option value="shared">直接使用目录</option>
+              </select></label>
+              <label className="grid gap-1 text-sm">父任务<select className="h-9 rounded-md border bg-card px-2" value={parentId} onChange={e => setParentId(e.target.value)}>
+                <option value="">无</option>
+                {tasks.filter(task => task.id !== existing?.id).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}
+              </select></label>
+              <label className="grid gap-1 text-sm">阶段<Input type="number" min="0" max="100" disabled={!parentId} value={stage} onChange={e => setStage(Number(e.target.value))} /></label>
+              <label className="grid gap-1 text-sm sm:col-span-2">前置任务（可多选）<select multiple className="min-h-16 rounded-md border bg-card p-2" value={blockedBy}
+                onChange={e => setBlockedBy(Array.from(e.target.selectedOptions, option => option.value))}>
+                {tasks.filter(task => task.id !== existing?.id).map(task => <option key={task.id} value={task.id}>{task.title}</option>)}
+              </select></label>
+              <label className="grid gap-1 text-sm sm:col-span-2">阻塞原因<Input value={blockedReason} onChange={e => setBlockedReason(e.target.value)} maxLength={2000} /></label>
+              <label className="grid gap-1 text-sm sm:col-span-2">GitHub PR<Input value={prUrl} onChange={e => setPrUrl(e.target.value)} placeholder="https://github.com/owner/repo/pull/123" /></label>
+            </div>
+          </details>
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

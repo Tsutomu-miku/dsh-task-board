@@ -11,10 +11,13 @@ import { TaskFormDialog } from "../board/TaskFormDialog"
 import { ComposerBox } from "./ComposerBox"
 import { MessageStream } from "./MessageStream"
 import { RunHistoryDialog } from "./RunHistoryDialog"
+import { RunControls } from "./RunControls"
+import { TaskWorkspaceDialog } from "./TaskWorkspaceDialog"
 import { useConversation } from "./useConversation"
 
 export function ConversationView({
   task,
+  tasks,
   executors,
   defaultWorkdir,
   workspaceHost,
@@ -24,8 +27,10 @@ export function ConversationView({
   onBack,
   save,
   openSession,
+  openTask,
 }: {
   task: TaskItem
+  tasks: TaskItem[]
   executors: Executor[]
   defaultWorkdir: string
   workspaceHost?: "wsl" | "local"
@@ -35,11 +40,13 @@ export function ConversationView({
   onBack: () => void
   save: BoardSaveFn
   openSession: (id: string) => void
+  openTask: (id: string) => void
 }) {
   const executor = executors.find(row => row.id === task.executorId)
   const { transcript, error } = useConversation(task.id, task.runs[0])
   const [showHistory, setShowHistory] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [details, setDetails] = useState<"discussion" | "delivery" | null>(null)
   const [moveError, setMoveError] = useState("")
   const active = task.status === "running"
 
@@ -66,7 +73,7 @@ export function ConversationView({
                 <h1 className="truncate text-sm leading-5 font-semibold text-foreground" title={task.title}>
                   {task.title}
                 </h1>
-                {!active && (
+                {!active && !task.archived && (
                   <button
                     type="button"
                     aria-label="编辑任务信息"
@@ -89,7 +96,7 @@ export function ConversationView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {active ? (
+            {active || task.archived ? (
               <TaskStatusPill status={task.status} className="h-8 px-3" />
             ) : (
               <Select value={task.status} onValueChange={value => void handleStatusChange(value as TaskStatus)}>
@@ -106,6 +113,12 @@ export function ConversationView({
                 </SelectContent>
               </Select>
             )}
+
+            <Button variant="outline" size="sm" onClick={() => setDetails("discussion")}>协作</Button>
+            <Button variant="outline" size="sm" onClick={() => setDetails("delivery")}>交付</Button>
+            {(task.status === "done" || task.archived) && <Button variant="ghost" size="sm" onClick={() => {
+              void save({ action: "archive", id: task.id, archived: !task.archived }).catch(err => setMoveError((err as Error).message))
+            }}>{task.archived ? "恢复任务" : "归档"}</Button>}
 
             <Button variant="outline" size="sm" onClick={() => setShowHistory(true)}>
               <History className="size-3.5" aria-hidden="true" />
@@ -126,10 +139,10 @@ export function ConversationView({
           </div>
         </div>
 
-        {moveError && (
+        {(moveError || task.blockedReason) && (
           <div className="mx-auto max-w-5xl px-4 pb-2.5 md:px-6">
             <Alert variant="destructive">
-              <AlertDescription>{moveError}</AlertDescription>
+              <AlertDescription>{moveError || task.blockedReason}</AlertDescription>
             </Alert>
           </div>
         )}
@@ -137,7 +150,14 @@ export function ConversationView({
 
       <MessageStream task={task} executor={executor} transcript={transcript} error={error} />
 
-      <ComposerBox task={task} executors={executors} running={running} queue={queue} preference={defaultSendMode} save={save} />
+      {task.archived ? <div className="p-4 text-center text-sm text-muted-foreground">任务已归档</div> : <div>
+        {active && <RunControls key={transcript?.approval?.id ?? task.runs[0]?.id} task={task} canSteer={transcript?.canSteer}
+          approval={transcript?.approval} save={save} />}
+        <ComposerBox task={task} executors={executors} running={running} queue={queue} preference={defaultSendMode} save={save} />
+      </div>}
+
+      {details && <TaskWorkspaceDialog task={task} tasks={tasks} executors={executors} save={save} close={() => setDetails(null)}
+        openTask={openTask} initialView={details} />}
 
       {showHistory && (
         <RunHistoryDialog task={task} onClose={() => setShowHistory(false)} openSession={openSession} />
@@ -146,6 +166,7 @@ export function ConversationView({
       {editing && (
         <TaskFormDialog
           existing={task}
+          tasks={tasks}
           executors={executors}
           preferredExecutorId={task.executorId}
           defaultWorkdir={defaultWorkdir}

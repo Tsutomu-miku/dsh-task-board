@@ -5,7 +5,7 @@ export function createQueueRepository(db) {
   const markFailed = db.prepare("UPDATE queued_messages SET error = ? WHERE id = ?")
   const order = "priority DESC, CASE WHEN priority = 0 THEN position ELSE -position END"
   const select = db.prepare(`SELECT message, error FROM queued_messages ORDER BY error IS NOT NULL, ${order}`)
-  const next = db.prepare(`SELECT message FROM queued_messages WHERE error IS NULL ORDER BY ${order} LIMIT 1`)
+  const next = db.prepare(`SELECT message FROM queued_messages WHERE error IS NULL ORDER BY ${order}`)
   const defaultMode = db.prepare("SELECT default_send_mode AS mode FROM board_dispatch_settings WHERE singleton = 1")
   const setDefaultMode = db.prepare("UPDATE board_dispatch_settings SET default_send_mode = ? WHERE singleton = 1")
 
@@ -23,9 +23,8 @@ export function createQueueRepository(db) {
     list() {
       return select.all().map(row => ({ ...JSON.parse(row.message), error: row.error }))
     },
-    next() {
-      const row = next.get()
-      return row && JSON.parse(row.message)
+    pending() {
+      return next.all().map(row => JSON.parse(row.message))
     },
     remove(id, cardId) {
       return remove.run(id, cardId).changes !== 0

@@ -1,6 +1,7 @@
 export const ENGINES = {
   dsh: "DSH",
   codex: "Codex",
+  command: "本机命令",
 } as const
 
 export type Engine = keyof typeof ENGINES
@@ -8,6 +9,7 @@ export type Engine = keyof typeof ENGINES
 export const COLUMNS = [
   { status: "todo", label: "待办", description: "等待分配或启动的任务" },
   { status: "running", label: "执行中", description: "正在由执行器运行的任务" },
+  { status: "blocked", label: "已阻塞", description: "等待人工处理或补充信息" },
   { status: "review", label: "待验收", description: "已完成运行，等待确认结果" },
   { status: "done", label: "已完成", description: "已验收归档的任务" },
 ] as const
@@ -57,7 +59,22 @@ export interface ModelChoice extends ModelSelection {
   efforts: { id: string; name: string }[]
 }
 
-export interface Executor {
+export interface ExecutorProfile {
+  instructions?: string | null
+  skills?: string[]
+  agentTools?: boolean
+  env?: Record<string, string>
+  secretEnv?: string[]
+  mcpServers?: string[]
+  timeoutMs?: number | null
+  maxTokens?: number | null
+  approvalPolicy?: "on-request" | "never"
+  command?: string
+  args?: string[]
+  inputMode?: "arg" | "stdin"
+}
+
+export interface Executor extends ExecutorProfile {
   id: string
   engine: Engine
   name: string
@@ -72,7 +89,7 @@ export interface EnvironmentInfo {
   presets: { id: string; name?: string; available: boolean }[]
   dshModel: string | null
   codexVersion: string | null
-  models: Record<Engine, ModelChoice[]>
+  models: Partial<Record<Engine, ModelChoice[]>>
 }
 
 export interface RunRecord {
@@ -86,6 +103,9 @@ export interface RunRecord {
   error: string | null
   session: string | null
   executor: Executor
+  sourceWorkdir?: string
+  delivery?: GitDelivery | null
+  handoffNote?: string
   handoff?: { sourceRunId: string; afterRunId: string | null; includedRunIds: string[] }
 }
 
@@ -96,7 +116,16 @@ export interface RunEvent {
   message: string
 }
 
+export interface ApprovalRequest {
+  id: string
+  kind: "approval" | "questions"
+  summary: string
+  questions?: { id: string; header?: string; question: string; options: { label: string; description?: string }[] }[]
+}
+
 export interface Transcript {
+  canSteer?: boolean
+  approval?: ApprovalRequest
   replies: { id: number; runId: string; text: string }[]
   preview: { runId: string; text: string } | null
 }
@@ -108,7 +137,95 @@ export interface StatusTransition {
   at: number
 }
 
-export interface TaskItem {
+export interface TaskMetadata {
+  parentId?: string | null
+  stage?: number
+  blockedBy?: string[]
+  blockedReason?: string | null
+  priority?: number
+  labels?: string[]
+  project?: string | null
+  workspaceMode?: "isolated" | "shared"
+  prUrl?: string | null
+}
+
+export interface GitDelivery {
+  workdir: string
+  branch: string | null
+  commit: string
+  baseCommit: string
+  files: string[]
+  diff?: string
+  diffTruncated?: boolean
+}
+
+export interface PullRequest {
+  status: string
+  mergeState: string
+  branch: string
+  commit: string
+  ci: "none" | "pending" | "success" | "failure"
+  checkedAt: number
+}
+
+export interface BoardNotification {
+  id: string
+  cardId: string
+  kind: string
+  message: string
+  at: number
+  read: boolean
+}
+
+export interface TaskComment {
+  id: string
+  parentId: string | null
+  author: string
+  text: string
+  at: number
+}
+
+export interface TaskAttachment {
+  id: string
+  name: string
+  size: number
+  inline: boolean
+  author: string
+}
+
+export interface ProjectDocument {
+  id: string
+  title: string
+  text: string
+}
+
+export type WakeupCondition = "time" | "dependencies" | "status" | "ci-success"
+
+export interface WakeupRule {
+  id: string
+  condition: WakeupCondition
+  subjectId: string | null
+  status: TaskStatus | null
+  executorId: string
+  prompt: string
+  at: number | null
+  interval: number | null
+  enabled: boolean
+  lastRunAt: number | null
+  error: string | null
+}
+
+export interface TaskDetail {
+  comments: TaskComment[]
+  attachments: TaskAttachment[]
+  documents: ProjectDocument[]
+  wakeups: WakeupRule[]
+}
+
+export interface TaskItem extends TaskMetadata {
+  brief?: string
+  archived?: boolean
+  pullRequest?: PullRequest | null
   id: string
   title: string
   prompt: string
@@ -130,11 +247,16 @@ export interface BoardState {
   defaultExecutor: string | null
   defaultSendMode: DefaultSendMode
   queue: QueuedMessage[]
+  revision: number
+  notifications: BoardNotification[]
+  unreadNotifications: number
 }
 
+export type BoardSync = { revision: number; unchanged: true } | (BoardState & { delta: boolean; removed?: string[] })
+
 export type BoardAction =
-  | { action: "create"; title: string; prompt: string; executorId?: string; workdir?: string }
-  | { action: "update"; id: string; from?: TaskStatus; title?: string; prompt?: string; executorId?: string; workdir?: string }
+  | ({ action: "create"; title: string; prompt: string; executorId?: string; workdir?: string } & TaskMetadata)
+  | ({ action: "update"; id: string; from?: TaskStatus; title?: string; prompt?: string; executorId?: string; workdir?: string } & TaskMetadata)
   | { action: "delete"; id: string; from?: TaskStatus }
   | { action: "move"; id: string; from: TaskStatus; status: TaskStatus }
   | { action: "run"; id: string; from: TaskStatus; prompt: string; resume?: boolean; model?: ModelSelection | null }
@@ -151,7 +273,7 @@ export type BoardAction =
   | { action: "cancel-queued"; id: string; messageId: string }
   | { action: "set-default-send-mode"; mode: DefaultSendMode }
   | { action: "stop"; id: string; runId?: string }
-  | {
+  | (ExecutorProfile & {
       action: "save-executor"
       id?: string
       engine: Engine
@@ -160,9 +282,22 @@ export type BoardAction =
       preset: string | null
       sandbox: SandboxMode | null
       model: ModelSelection | null
-    }
+    })
   | { action: "toggle-executor"; id: string; enabled: boolean }
   | { action: "set-default-executor"; id: string }
+  | { action: "steer"; id: string; runId: string; prompt: string }
+  | { action: "approve"; id: string; runId: string; approvalId: string; decision: "accept" | "decline"; answer?: Record<string, string> }
+  | { action: "archive"; id: string; archived: boolean }
+  | { action: "refresh-pr"; id: string }
+  | { action: "post-comment"; id: string; text: string; parentId?: string }
+  | { action: "add-attachment"; id: string; name: string; mime: string; content: string }
+  | { action: "remove-attachment" | "remove-wakeup" | "remove-document"; id: string; resourceId: string }
+  | { action: "save-document"; id: string; title: string; text: string; resourceId?: string }
+  | { action: "save-wakeup"; id: string; wakeupId?: string; condition: WakeupCondition; subjectId?: string;
+      status?: TaskStatus; executorId: string; prompt: string; at?: number; interval?: number; enabled?: boolean }
+  | { action: "read-notification"; notificationId: string }
+  | { action: "read-all-notifications" }
+  | { action: "delete-executor"; id: string }
 
 export type BoardSaveFn = (input: BoardAction) => Promise<void>
 
