@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto"
 import { resolveWorkspace } from "../config.mjs"
 import { BoardError, requireText } from "../errors.mjs"
+import { editTaskMetadata } from "./task-metadata.mjs"
 import { builtinExecutorId } from "./executors.mjs"
 
-const MOVABLE_STATUSES = new Set(["todo", "review", "done"])
+const MOVABLE_STATUSES = new Set(["todo", "blocked", "review", "done"])
 
 export function createCardManager({ store, executors, replies, events, queue, storage, workdir }) {
   function move(card, status, cause) {
@@ -45,6 +46,7 @@ export function createCardManager({ store, executors, replies, events, queue, st
       runs: [],
       history: [{ from: null, to: "todo", cause: "created", at: created }],
     }
+    editTaskMetadata(card, input, () => store.list({ metadata: true }))
     store.save(card)
     return card
   }
@@ -54,8 +56,8 @@ export function createCardManager({ store, executors, replies, events, queue, st
       card.title = requireText(input.title, 120, "标题")
     }
     if (input.prompt !== undefined) {
-      card.prompt = requireText(input.prompt, 16000, "任务说明")
-      card.brief = card.prompt
+      card.brief = requireText(input.prompt, 16000, "任务说明")
+      if (!card.runs.length) card.prompt = card.brief
     }
     if (input.executorId !== undefined && input.executorId !== card.executorId) {
       const executor = executors.get(input.executorId)
@@ -69,13 +71,18 @@ export function createCardManager({ store, executors, replies, events, queue, st
       const executor = executors.get(card.executorId)
       card.workdir = rawWorkdir ? resolveWorkspace(rawWorkdir) : (executor.workdir ?? workdir)
     }
+    editTaskMetadata(card, input, () => store.list({ metadata: true }))
     store.save(card)
     return card
   }
 
-  function remove(card) {
+  function remove(card, removeResources = () => {}) {
+    if (store.list({ metadata: true }).some(other => other.parentId === card.id || other.blockedBy?.includes(card.id))) {
+      throw new BoardError(409, "请先移除其他任务对子任务或依赖关系的引用。")
+    }
     const runIds = card.runs.map(run => run.id)
     storage.atomic(() => {
+      removeResources()
       replies.removeByCard(card.id)
       queue.removeByCard(card.id)
       events.removeByRuns(runIds)
@@ -86,6 +93,7 @@ export function createCardManager({ store, executors, replies, events, queue, st
 
   function moveManually(card, status) {
     if (!MOVABLE_STATUSES.has(status)) throw new BoardError(400, "请选择有效的目标状态。")
+    if (status !== "blocked") card.blockedReason = null
     return move(card, status, "manual")
   }
 
@@ -97,6 +105,7 @@ export function createCardManager({ store, executors, replies, events, queue, st
       attempt.executor ??= snapshot
     }
     store.save(card)
+    store.saveHistory(card)
   }
 
   return {

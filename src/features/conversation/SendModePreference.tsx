@@ -14,8 +14,8 @@ export function SendModePreference() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetchBoardState(controller.signal).then(board => {
-      if (!controller.signal.aborted) setSaved(board.defaultSendMode)
+    fetchBoardState(0, controller.signal).then(board => {
+      if (!controller.signal.aborted && !("unchanged" in board)) setSaved(board.defaultSendMode)
     }).catch(error => {
       if (!controller.signal.aborted) setError(error.message)
     })

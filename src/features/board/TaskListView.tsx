@@ -63,7 +63,7 @@ export function TaskListView({
                       className="min-w-0 flex-1 text-left"
                     >
                       <div className="truncate text-sm font-medium text-foreground">{card.title}</div>
-                      <div className="truncate text-xs text-muted-foreground">{card.prompt}</div>
+                      <div className="truncate text-xs text-muted-foreground">{card.brief ?? card.prompt}</div>
                     </button>
 
                     <div className="flex flex-wrap items-center gap-2">

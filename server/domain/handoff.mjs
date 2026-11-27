@@ -1,4 +1,4 @@
-const HANDOFF_BYTES = 12_000
+const HANDOFF_BYTES = 48_000
 
 export function taskBrief(card) {
   return card.brief ?? card.runs.at(-1)?.prompt ?? card.prompt ?? ""
@@ -11,10 +11,16 @@ export function createHandoff(card, previous, replies) {
   const context = {
     taskId: card.id,
     title: card.title,
-    brief: brief.slice(0, 1600),
+    brief: brief.slice(0, 8000),
     throughRunId: source.id,
     ...(previous ? { afterRunId: previous.id } : {}),
     workspace: card.workdir,
+    ...(source.delivery ? { git: {
+      workdir: source.delivery.workdir, branch: source.delivery.branch, commit: source.delivery.commit,
+      files: source.delivery.files.slice(0, 30),
+    } } : {}),
+    ...(card.project ? { project: card.project } : {}),
+    ...(card.prUrl ? { pullRequest: card.prUrl } : {}),
     turns: [],
   }
   let remaining = HANDOFF_BYTES - Buffer.byteLength(JSON.stringify(context))
@@ -25,8 +31,9 @@ export function createHandoff(card, previous, replies) {
       agent: turn.executor.name,
       workspace: turn.executor.workdir,
       status: turn.status,
-      request: (turn.prompt ?? "").slice(0, 1000),
-      result: (turn.output || replies.latestText(turn.id) || turn.error || "").slice(0, 1500),
+      request: (turn.prompt ?? "").slice(0, 2400),
+      result: (turn.output || replies.latestText(turn.id) || turn.error || "").slice(0, 3500),
+      ...(turn.handoffNote ? { handoffNote: turn.handoffNote } : {}),
     }
     const size = Buffer.byteLength(JSON.stringify(excerpt)) + 1
     if (size > remaining) break

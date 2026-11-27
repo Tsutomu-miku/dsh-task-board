@@ -13,6 +13,7 @@ import { cn } from "../lib/utils"
 const TASK_STATUS_STYLE: Record<TaskStatus, { icon: typeof CircleDashed; color: string; bg: string; spin?: boolean }> = {
   todo: { icon: CircleDashed, color: "text-[var(--status-todo)]", bg: "bg-[var(--status-todo-soft)]" },
   running: { icon: Loader2, color: "text-[var(--status-running)]", bg: "bg-[var(--status-running-soft)]", spin: true },
+  blocked: { icon: AlertTriangle, color: "text-[var(--board-danger)]", bg: "bg-[var(--board-danger-soft)]" },
   review: { icon: Clock, color: "text-[var(--status-review)]", bg: "bg-[var(--status-review-soft)]" },
   done: { icon: CheckCircle2, color: "text-[var(--status-done)]", bg: "bg-[var(--status-done-soft)]" },
 }

@@ -48,5 +48,13 @@ export function parsePluginConfig(config = {}, defaultCwd) {
   if (!VALID_SANDBOXES.has(codexSandbox)) {
     throw new Error("invalid dsh-task-board Codex sandbox")
   }
-  return { workdir, codexSandbox }
+  const { parallelism = 4, timeoutMs = 3_600_000, maxTokens = 0 } = config
+  for (const [key, value, min, max] of [
+    ["parallelism", parallelism, 1, 16],
+    ["timeoutMs", timeoutMs, 1000, 86_400_000],
+    ["maxTokens", maxTokens, 0, 100_000_000],
+  ]) {
+    if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`Invalid board config: ${key}`)
+  }
+  return { workdir, codexSandbox, parallelism, timeoutMs, maxTokens }
 }

@@ -18,6 +18,7 @@ export function createExecutorRepository(db) {
     save(executor) {
       upsertOne.run(executor.id, JSON.stringify(executor))
     },
+    remove(id) { db.prepare("DELETE FROM executors WHERE id = ?").run(id) },
     defaultId() {
       return selectDefault.get()?.default_executor ?? null
     },
