@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Cpu, Kanban, Loader2, Plus } from "lucide-react"
+import { ChevronDown, Cpu, Kanban, Loader2, Plus } from "lucide-react"
+import { DropdownMenu as Menu } from "radix-ui"
 import { Alert, AlertDescription } from "../../shared/components/ui/alert"
 import { Button } from "../../shared/components/ui/button"
 import { useBoard } from "../../shared/hooks/use-board"
@@ -28,7 +29,6 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
 
   const selectedTask = board?.cards.find(card => card.id === selectedTaskId) ?? null
   const runningTasks = board?.cards.filter(card => card.status === "running") ?? []
-  const runningTask = runningTasks[0]
   const blockedCount = board?.cards.filter(card => !card.archived && card.status === "blocked").length ?? 0
   const enabledExecutors = board?.executors.filter(item => item.enabled).length ?? 0
 
@@ -65,16 +65,22 @@ export function AppShell({ openSession }: { openSession: (id: string) => void })
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                {runningTask && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTaskId(runningTask.id)}
-                    className="inline-flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-running)_28%,transparent)] bg-[var(--status-running-soft)] px-3 text-xs font-medium text-[var(--status-running)] transition-opacity hover:opacity-85"
-                    title={`查看正在执行的任务：${runningTask.title}`}
-                  >
-                    <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
-                    <span className="truncate">{runningTasks.length > 1 ? `${runningTasks.length} 项执行中` : runningTask.title}</span>
-                  </button>
+                {runningTasks.length > 0 && (
+                  <Menu.Root>
+                    <Menu.Trigger className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-running)_28%,transparent)] bg-[var(--status-running-soft)] px-3 text-xs font-medium text-[var(--status-running)] transition-opacity hover:opacity-85">
+                      <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      <span>{runningTasks.length} 项执行中</span>
+                      <ChevronDown className="size-3.5" aria-hidden="true" />
+                    </Menu.Trigger>
+                    <Menu.Portal container={portalRoot}>
+                      <Menu.Content align="end" sideOffset={6} className="z-50 grid max-h-72 min-w-48 max-w-72 gap-0.5 overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg">
+                        {runningTasks.map(task => <Menu.Item key={task.id} onSelect={() => setSelectedTaskId(task.id)}
+                          className="cursor-default truncate rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent">
+                          {task.title}
+                        </Menu.Item>)}
+                      </Menu.Content>
+                    </Menu.Portal>
+                  </Menu.Root>
                 )}
 
                 <nav aria-label="任务看板导航" className="segmented-nav inline-flex items-center gap-0.5">

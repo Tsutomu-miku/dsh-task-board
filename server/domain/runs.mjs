@@ -47,26 +47,57 @@ export function createRunManager({
     return { executor, source, workspace, legacy }
   }
 
-  function available(card, workspace) {
-    return !card.archived && card.status !== "running" &&
-      jobs.size < parallelism && ![...jobs.values()].some(job =>
-        job.cardId === card.id || containsPath(job.lock, workspace.lock) || containsPath(workspace.lock, job.lock))
+  function occupant(lock) {
+    return [...jobs.values()].find(job => containsPath(job.lock, lock) || containsPath(lock, job.lock))
+  }
+
+  function waiting(card, workspace) {
+    if (card.archived) return "请先恢复归档任务。"
+    if (card.status === "running" || jobs.has(card.id)) return "等待此任务结束当前运行。"
+    const other = occupant(workspace.lock)
+    if (other) return `等待「${other.card.title}」释放工作目录。`
+    if (jobs.size >= parallelism) return `并发名额已满（${jobs.size}/${parallelism}）。`
+    return null
+  }
+
+  function queueState() {
+    const seen = new Set()
+    return queue.list().map(message => {
+      if (message.error) return message
+      const earlier = seen.has(message.cardId)
+      seen.add(message.cardId)
+      try {
+        const card = cards.get(message.cardId)
+        if (card.status === "running") return { ...message, waitingReason: "等待此任务结束当前运行。" }
+        if (earlier) return { ...message, waitingReason: "等待此任务的前一条消息。" }
+        const plan = dispatchPlan(card, message, true)
+        return { ...message, waitingReason: waiting(card, plan.workspace) ?? "等待调度。" }
+      } catch (error) {
+        if (!(error instanceof BoardError)) throw error
+        return { ...message, waitingReason: error.message }
+      }
+    })
   }
 
   function start(card, input, queued = false, planned = dispatchPlan(card, input, queued)) {
     const { executor, workspace, source, legacy } = planned
-    if (!available(card, workspace)) {
-      throw new BoardError(409, "已有任务占用工作目录，或并发名额已满。")
-    }
+    const reason = waiting(card, workspace)
+    if (reason) throw new BoardError(409, queued ? reason : "已有任务占用工作目录，或并发名额已满。")
     const prompt = requireText(input.prompt, 16000, "任务说明")
     if (input.resume && !card.session) throw new BoardError(400, "这张卡片还没有可继续的会话。")
-    const workdir = workspaces.prepare(workspace)
+    let prepared
+    try { prepared = workspaces.prepare(card, workspace) } finally {
+      if (workspace.checkout) cards.save(card)
+    }
+    const { path: workdir, generation } = prepared
+    const sameWorkspace = attempt => attempt.executor.workdir === workdir &&
+      (attempt.workspaceGeneration ?? null) === (generation ?? null)
     const previous = queued
       ? !input.freshSession && card.runs.find(attempt =>
           attempt.status === "succeeded" && attempt.session &&
-          attempt.executor.id === executor.id && attempt.executor.workdir === workdir &&
+          attempt.executor.id === executor.id && sameWorkspace(attempt) &&
           attempt.executor.preset === executor.preset)
-      : input.resume && card.runs.find(attempt => attempt.session === card.session && attempt.executor.workdir === workdir)
+      : input.resume && card.runs.find(attempt => attempt.session === card.session && sameWorkspace(attempt))
     if (input.resume && !previous) throw new BoardError(409, "会话工作区已变更，请启动新会话。")
     const session = previous?.session ?? null
     const model = input.model === undefined
@@ -82,6 +113,7 @@ export function createRunManager({
       id: queued ? input.id : randomUUID(),
       started: Date.now(), status: "running", prompt, output: "", error: null, session, executor: snapshot,
       sourceWorkdir: source, dispatchDepth: queued ? input.dispatchDepth ?? 0 : 0,
+      ...(generation ? { workspaceGeneration: generation } : {}),
       ...(legacy ? { legacyWorkspace: true } : {}),
       baseCommit: gitDelivery(workdir)?.commit,
       ...(handoff ? { handoff: {
@@ -124,7 +156,7 @@ export function createRunManager({
         visited.add(card.id)
         if (card.archived || card.status === "running") continue
         const plan = dispatchPlan(card, message, true)
-        if (available(card, plan.workspace)) start(card, message, true, plan)
+        if (!waiting(card, plan.workspace)) start(card, message, true, plan)
       } catch (error) {
         if (!(error instanceof BoardError)) throw error
         queue.fail(message.id, error.message)
@@ -263,7 +295,8 @@ export function createRunManager({
   }
 
   return {
-    start, send, drain, recover,
+    start, send, drain, recover, queueState,
+    occupied: lock => Boolean(occupant(lock)),
     job(cardId) { return jobs.get(cardId) },
     setDefaultMode(mode) {
       if (mode !== "queue" && mode !== "priority") throw new BoardError(400, "Invalid default send mode.")

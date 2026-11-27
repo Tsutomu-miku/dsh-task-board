@@ -37,6 +37,7 @@ export interface QueuedMessage {
   mode: SendMode
   prompt: string
   error: string | null
+  waitingReason?: string
 }
 
 export const SANDBOX_LABELS = {
@@ -138,6 +139,19 @@ export interface GitDelivery {
   diffTruncated?: boolean
 }
 
+export interface TaskWorktree {
+  id: string
+  path: string
+  repo: string
+  branch: string
+  target: string | null
+  legacyTarget?: boolean
+  risks: string[]
+  confirmation?: string
+  cleanupError: string | null
+  mergeError: string | null
+}
+
 export interface TaskAttachment {
   id: string
   name: string
@@ -178,7 +192,9 @@ export type BoardSync = { revision: number; unchanged: true } | (BoardState & { 
 export type BoardAction =
   | ({ action: "create"; title: string; prompt: string; executorId?: string; workdir?: string; autoRun?: boolean } & TaskMetadata)
   | ({ action: "update"; id: string; from?: TaskStatus; title?: string; prompt?: string; executorId?: string; workdir?: string } & TaskMetadata)
-  | { action: "delete"; id: string; from?: TaskStatus }
+  | { action: "delete"; id: string; from?: TaskStatus; confirmations?: string[] }
+  | { action: "merge-worktree"; id: string; worktreeId: string; target: string }
+  | { action: "cleanup-worktree"; id: string; worktreeId: string; confirmations?: string[] }
   | { action: "move"; id: string; from: TaskStatus; status: TaskStatus; blockedReason?: string }
   | { action: "run"; id: string; from: TaskStatus; prompt: string; resume?: boolean; model?: ModelSelection | null }
   | {

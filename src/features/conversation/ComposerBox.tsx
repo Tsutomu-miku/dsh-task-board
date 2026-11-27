@@ -153,8 +153,8 @@ export function ComposerBox({ task, executors, running, canSteer, queue, prefere
                 <li key={item.id} className="flex min-w-0 items-center gap-2 text-xs">
                   <span className="shrink-0 text-muted-foreground">@{item.executorName}</span>
                   <span title={item.prompt} className="min-w-0 flex-1 truncate">{item.prompt}</span>
-                  <span title={item.error ?? undefined} className="text-muted-foreground">
-                    {item.error ? copy.queueFailed : copy[item.mode]}
+                  <span title={item.error ?? item.waitingReason} className="max-w-[45%] truncate text-muted-foreground">
+                    {item.error ?? item.waitingReason ?? copy[item.mode]}
                   </span>
                   <Button type="button" size="xs" variant="ghost" aria-label={`${item.error ? copy.dismiss : copy.cancel} · ${item.prompt}`} onClick={() => void cancel(item.id)}>
                     {item.error ? copy.dismiss : copy.cancel}

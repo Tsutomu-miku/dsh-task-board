@@ -38,8 +38,9 @@ export function openBoard({
     })
     const cards = createCardManager({ store, executors, replies, events, queue, storage, workdir })
     const collaboration = createCollaboration({ storage, cards, executors })
+    const workspaces = createWorkspaces(database)
     const runs = createRunManager({
-      cards, executors, events, replies, queue, storage, run, workspaces: createWorkspaces(database),
+      cards, executors, events, replies, queue, storage, run, workspaces,
       collaboration, parallelism, timeoutMs, maxTokens,
     })
 
@@ -64,7 +65,7 @@ export function openBoard({
         return {
           ...snapshot, revision, delta, workdir, workspaceHost: WORKSPACE_HOST,
           executors: executors.list(), defaultExecutor: executors.defaultId(), defaultSendMode: queue.defaultMode(),
-          queue: queue.list(),
+          queue: runs.queueState(),
         }
       },
       events(runId, after) { assertOpen(); return events.list(runId, after) },
@@ -91,8 +92,9 @@ export function openBoard({
         const first = card.runs.findLast(item => item.executor.workdir === workspace && item.baseCommit)
         const git = runId && attempt !== card.runs[0] ? attempt?.delivery ?? null
           : gitDelivery(workspace, { diff: !summary, baseCommit: runId ? attempt?.baseCommit : first?.baseCommit })
-        return { git }
+        return { git, hasWorktrees: workspaces.hasRecords(card), worktrees: summary ? [] : workspaces.list(card, runs.occupied) }
       },
+      worktrees(cardId) { assertOpen(); return workspaces.list(cards.get(cardId), runs.occupied) },
       act(raw) {
         assertOpen()
         const input = assertPlainObject(raw)
@@ -115,6 +117,7 @@ export function openBoard({
         if (input.action === "send") return runs.send(card, input)
         if (input.action === "cancel-queued") {
           if (!queue.remove(input.messageId, card.id)) throw new BoardError(409, "This message has left the queue.")
+          runs.drain()
           return { canceled: input.messageId }
         }
         if (card.status === "running") throw new BoardError(409, "卡片正在执行。")
@@ -122,7 +125,22 @@ export function openBoard({
           throw new BoardError(409, "卡片状态已更新，请刷新后重试。")
         }
         if (input.action === "run") return runs.start(card, input)
-        if (input.action === "delete") return cards.remove(card, () => collaboration.removeCardFiles(card.id))
+        if (input.action === "merge-worktree") {
+          workspaces.merge(card, input.worktreeId, input.target, runs.occupied)
+          cards.save(card)
+          return card
+        }
+        if (input.action === "cleanup-worktree" || input.action === "delete") {
+          if (input.action === "cleanup-worktree" && typeof input.worktreeId !== "string") {
+            throw new BoardError(400, "缺少工作树编号。")
+          }
+          try {
+            workspaces.cleanup(card, input.action === "delete" ? undefined : input.worktreeId,
+              Array.isArray(input.confirmations) ? input.confirmations : [], runs.occupied)
+          } finally { cards.save(card) }
+          if (input.action === "delete") return cards.remove(card, () => collaboration.removeCardFiles(card.id))
+          return card
+        }
         if (input.action === "archive") {
           card.archived = input.archived === true
           if (card.archived && card.status !== "done") throw new BoardError(409, "请先验收任务，再归档。")

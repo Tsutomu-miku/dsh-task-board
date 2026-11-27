@@ -107,6 +107,7 @@ test("new tasks use the shared directory and ignore retired orchestration fields
   assert.equal(next.blockedBy, undefined)
   const [queued] = f.board.read().queue
   assert.equal(queued.cardId, next.id)
+  assert.match(queued.waitingReason, /First.*工作目录/)
 
   await f.restart()
   assert.equal(f.calls[1].input.requestId, queued.id)
@@ -114,6 +115,65 @@ test("new tasks use the shared directory and ignore retired orchestration fields
   assert.equal(f.board.read().cards.find(card => card.id === original.id).status, "todo")
   assert.deepEqual(f.board.read().queue, [])
   await f.finish(1)
+})
+
+test("different repositories dispatch independently until capacity is available", async t => {
+  const f = await fixture(t, { parallelism: 2 })
+  const repos = [f.repo]
+  for (const name of ["other", "third"]) {
+    const repo = join(f.root, name)
+    git(f.root, "clone", f.repo, repo)
+    repos.push(repo)
+  }
+  const cards = repos.map((workdir, index) => f.create(`Repository ${index}`, { workdir, autoRun: true }))
+  assert.deepEqual(f.calls.map(call => call.input.workdir), repos.slice(0, 2))
+  assert.match(f.board.read().queue.find(item => item.cardId === cards[2].id).waitingReason, /2\/2/)
+  await f.finish(0)
+  assert.equal(f.calls[2].input.workdir, repos[2])
+})
+
+test("worktrees merge fast-forward only and cleanup protects unmerged content", async t => {
+  const f = await fixture(t)
+  const first = f.create("First tree", { workspaceMode: "isolated", autoRun: true })
+  const second = f.create("Second tree", { workspaceMode: "isolated", autoRun: true })
+  const [a, b] = f.calls.map(call => call.input.workdir)
+  const commit = (path, message) => {
+    git(path, "add", ".")
+    git(path, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", message)
+  }
+  const merge = (card, tree) => f.board.act({ action: "merge-worktree", id: card.id, worktreeId: tree.id, target: tree.target })
+  const clean = (card, tree, confirmations) => f.board.act({ action: "cleanup-worktree", id: card.id, worktreeId: tree.id, confirmations })
+  await writeFile(join(a, "one.txt"), "one")
+  await writeFile(join(b, "two.txt"), "two")
+  await f.finish(0)
+  await f.finish(1)
+  await f.restart()
+  const [one] = f.board.worktrees(first.id)
+  const [two] = f.board.worktrees(second.id)
+  assert.match(one.mergeError, /先在.*提交/)
+  assert.throws(() => clean(first, one), /再次确认/)
+  commit(a, "First")
+  commit(b, "Second")
+  await writeFile(join(f.repo, "tracked.txt"), "dirty")
+  assert.throws(() => merge(first, one), /原目录有未提交/)
+  git(f.repo, "restore", "tracked.txt")
+  git(f.repo, "switch", "-c", "another")
+  assert.throws(() => merge(first, one), /切回目标分支/)
+  git(f.repo, "switch", "main")
+  merge(first, one)
+  assert.throws(() => merge(second, two), /已分叉/)
+  git(b, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "rebase", "main")
+  merge(second, two)
+  assert.equal(await readFile(join(f.repo, "one.txt"), "utf8"), "one")
+  assert.equal(await readFile(join(f.repo, "two.txt"), "utf8"), "two")
+  clean(first, one)
+  await writeFile(join(b, "unsaved.txt"), "local")
+  const [risky] = f.board.worktrees(second.id)
+  assert.throws(() => f.board.act({ action: "delete", id: second.id }), /再次确认/)
+  assert.equal(f.board.act({ action: "delete", id: second.id, confirmations: [risky.confirmation] }).deleted, second.id)
+  assert.deepEqual(f.board.worktrees(first.id), [])
+  assert.equal(git(f.repo, "branch", "--list", "board/*"), "")
+  assert.doesNotMatch(git(f.repo, "worktree", "list", "--porcelain"), /worktrees\//)
 })
 
 test("DSH exposes scoped outcomes and delegates to an opted-in executor on the same card", async t => {

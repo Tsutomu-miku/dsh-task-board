@@ -31,7 +31,7 @@ npm pack
 `npm pack` 会输出安装包的文件名。已有 `.tgz` 安装包时，可直接在文件所在目录执行以下命令，文件名按实际版本替换。
 
 ```zsh
-npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.10.0.tgz
+npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh plugin --profile web add ./dsh-task-board-0.11.0.tgz
 npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
 ```
 
@@ -49,7 +49,7 @@ npx --yes --package=@deepseek-ai/dsh@0.2.2-rc.5 -- dsh web
 ### 工作目录与变更
 
 - 默认同时运行最多 4 张卡。新任务直接使用当前目录，可读取未提交文件。相交的工作目录会串行调度。
-- 可选「独立工作树」让 Git 任务在单独的目录和 `board/<任务 ID>` 分支执行。任务页的「变更」展示分支、基准提交、文件列表和 Diff。当前版本可使用本机 Git 合回或清理工作树。
+- 可选「独立工作树」让 Git 任务在单独的目录和 `board/<任务 ID>` 分支执行。在任务页的「变更」查看文件和 Diff，将已提交的改动快进合回原分支，或清理工作树及分支。清理未合回内容需再次确认。
 - 原有任务、会话、运行记录和附件保留。此前保存的项目、任务依赖、讨论和唤醒数据仍留在原 profile。原有任务如绑定了旧命令执行器，可在编辑任务时选择 DSH 或 Codex。
 
 ### 执行器与自动交接
